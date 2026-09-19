@@ -65,14 +65,11 @@
     return Math.min(100, Math.round(((done + partial) / count) * 100));
   }
 
-  /* "bandwidth" is bytes off the wire, already formatted as MB/s by both the
-     ffmpeg and the segment path. It needs two size samples, so it is empty for
-     the first moment of a download. ffmpeg also reports a "speed=" multiplier
-     against real time, but showing that in the gap swaps the unit under the
-     reader a second later, so the reading stays in MB/s and just starts at 0. */
+  /* "bandwidth" is only populated when response bytes are measured directly.
+     FFmpeg's output-file growth is deliberately not labelled as network speed. */
   function speedLabel(item, ffmpeg) {
     if (item.status !== "running") return "";
-    return (ffmpeg.active && ffmpeg.bandwidth) || "0 MB/s";
+    return (ffmpeg.active && ffmpeg.bandwidth) || "";
   }
 
   function formatDuration(seconds) {

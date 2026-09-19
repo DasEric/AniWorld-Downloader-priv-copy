@@ -321,7 +321,7 @@ def _cleanup_episode_download(self):
     try:
         from .hls import cleanup_temp_files
 
-        for suffix in (".temp_full.mkv", ".temp_audio.mkv"):
+        for suffix in (".temp_full.mkv", ".temp_audio.mkv", ".temp_video.mkv"):
             temp_path = self._episode_path.with_suffix(suffix)
             cleanup_temp_files(temp_path.with_suffix(".hlswork"))
     except (ImportError, OSError):
@@ -432,6 +432,13 @@ def get_ffmpeg_progress():
         return dict(_ffmpeg_progress)
 
 
+def _clear_download_progress():
+    with _ffmpeg_progress_lock:
+        _ffmpeg_progress.update(
+            percent=0.0, time="", speed="", bandwidth="", active=False
+        )
+
+
 def _parse_ffmpeg_time(time_str):
     """Parse ffmpeg time string (HH:MM:SS.xx) to seconds."""
     try:
@@ -460,7 +467,14 @@ class DownloadCancelled(Exception):
     """Raised when we killed the download ourselves, not when it failed."""
 
 
-def _run_ffmpeg_with_progress(node, overwrite_output=True, label=""):
+def _run_ffmpeg_with_progress(
+    node,
+    overwrite_output=True,
+    label="",
+    progress_start=0.0,
+    progress_end=100.0,
+    keep_progress=False,
+):
     """Run an ffmpeg node and stream its progress output cleanly.
 
     Includes stall detection: if FFmpeg stops making progress (same frame/time
@@ -480,8 +494,9 @@ def _run_ffmpeg_with_progress(node, overwrite_output=True, label=""):
     _RE_TIME = re.compile(r"time=(\S+)")
     _RE_SPEED = re.compile(r"speed=\s*(\S+)")
     _RE_BITRATE = re.compile(r"bitrate=\s*(\S+)")
-    _RE_SIZE = re.compile(r"size=\s*(\d+(?:\.\d+)?)\s*([kKmM])(?:i)?B", re.IGNORECASE)
     _RE_DURATION = re.compile(r"Duration:\s*(\d+:\d+:\d+\.\d+)")
+    progress_start = max(0.0, min(float(progress_start), 100.0))
+    progress_end = max(progress_start, min(float(progress_end), 100.0))
 
     # Use shorter stats_period for smoother progress (1s in non-debug, 10s in debug)
     stats_period = "10" if debug_mode else "1"
@@ -525,15 +540,13 @@ def _run_ffmpeg_with_progress(node, overwrite_output=True, label=""):
     stderr_lines = []  # collect non-progress stderr lines for error reporting
     last_frame = None
     last_time = None
-    last_size_kb = None
-    last_size_ts = None
     last_change = time.monotonic()
     total_duration = 0.0
     cancelled = False
 
     with _ffmpeg_progress_lock:
         _ffmpeg_progress.update(
-            percent=0.0, time="", speed="", bandwidth="", active=True
+            percent=progress_start, time="", speed="", bandwidth="", active=True
         )
 
     try:
@@ -563,7 +576,6 @@ def _run_ffmpeg_with_progress(node, overwrite_output=True, label=""):
                 cur_time_str = ""
                 cur_speed_str = ""
                 cur_bitrate_str = ""
-                cur_bw_str = ""
                 m = _RE_FRAME.search(line_str)
                 if m:
                     cur_frame = m.group(1)
@@ -579,36 +591,24 @@ def _run_ffmpeg_with_progress(node, overwrite_output=True, label=""):
                     cur_bitrate_str = m.group(1)
                     if cur_bitrate_str.lower() == "n/a":
                         cur_bitrate_str = ""
-                m = _RE_SIZE.search(line_str)
-                if m:
-                    size_val = float(m.group(1))
-                    size_unit = m.group(2).lower()
-                    size_kb = size_val * (1024 if size_unit == "m" else 1)
-                    now = time.monotonic()
-                    if last_size_kb is not None and last_size_ts is not None:
-                        dt = now - last_size_ts
-                        if dt > 0:
-                            kb_per_sec = (size_kb - last_size_kb) / dt
-                            if kb_per_sec > 0:
-                                mb_per_sec = kb_per_sec / 1024
-                                cur_bw_str = f"{mb_per_sec:.1f} MB/s"
-                    last_size_kb = size_kb
-                    last_size_ts = now
-
                 # Compute percentage
-                percent = 0.0
+                raw_percent = 0.0
                 if total_duration > 0 and cur_time_str:
                     elapsed = _parse_ffmpeg_time(cur_time_str)
-                    percent = min((elapsed / total_duration) * 100, 100.0)
+                    raw_percent = min((elapsed / total_duration) * 100, 100.0)
+                percent = progress_start + (
+                    (progress_end - progress_start) * raw_percent / 100.0
+                )
 
                 # Update global progress for web UI
                 with _ffmpeg_progress_lock:
-                    prev_bw = _ffmpeg_progress.get("bandwidth", "")
                     _ffmpeg_progress.update(
                         percent=round(percent, 1),
                         time=cur_time_str,
                         speed=cur_speed_str,
-                        bandwidth=cur_bw_str or prev_bw,
+                        # FFmpeg reports output-file size, not bytes received.
+                        # Do not present that value as network throughput.
+                        bandwidth="",
                         active=True,
                     )
 
@@ -689,6 +689,15 @@ def _run_ffmpeg_with_progress(node, overwrite_output=True, label=""):
         )
         logger.warning(f"[FFmpeg] Process failed (rc={process.returncode}):\n{detail}")
         raise RuntimeError(f"ffmpeg error (rc={process.returncode}): {detail}")
+    if keep_progress:
+        with _ffmpeg_progress_lock:
+            _ffmpeg_progress.update(
+                percent=progress_end,
+                time="",
+                speed="",
+                bandwidth="",
+                active=True,
+            )
 
 
 def movie_folder_enabled():
@@ -696,7 +705,9 @@ def movie_folder_enabled():
     return os.getenv("ANIWORLD_MOVIE_FOLDER", "1") != "0"
 
 
-def _finalize_episode(temp_path, episode_path, label="", owner=None):
+def _finalize_episode(
+    temp_path, episode_path, label="", owner=None, progress_start=0.0
+):
     """Move `temp_path` onto `episode_path`, remuxing when containers differ.
 
     The muxer always writes Matroska, so a naming template ending in `.mp4`
@@ -711,6 +722,8 @@ def _finalize_episode(temp_path, episode_path, label="", owner=None):
         os.replace(temp_path, episode_path)
         if owner is not None:
             _finalize_resolution_naming(owner)
+        if progress_start:
+            _clear_download_progress()
         return
 
     converted = episode_path.with_suffix(f".convert.{target_ext}")
@@ -723,6 +736,7 @@ def _finalize_episode(temp_path, episode_path, label="", owner=None):
         _run_ffmpeg_with_progress(
             ffmpeg.input(str(temp_path)).output(str(converted), **output_kwargs),
             label=label,
+            progress_start=progress_start,
         )
     except RuntimeError:
         if target_ext != "mp4":
@@ -742,6 +756,7 @@ def _finalize_episode(temp_path, episode_path, label="", owner=None):
                 movflags="+faststart",
             ),
             label=label,
+            progress_start=progress_start,
         )
 
     os.replace(converted, episode_path)
@@ -1089,34 +1104,68 @@ def _download_hls_manual(m3u8_url, headers, temp_ts, label=""):
             )
 
 
-def _hls_rendition_download(stream_url, temp_prefix, headers, audio_code, ep_label):
-    """Fetch an HLS stream, selecting the ``audio_code`` audio rendition.
+def _parallel_hls_enabled(owner, stream_url):
+    """Whether the shared fast HLS path should handle this episode.
 
-    Used when the wanted audio (e.g. a German dub on cineby) is a *separate*
-    ``#EXT-X-MEDIA:TYPE=AUDIO`` rendition inside a multi-audio master rather than
-    the muxed default — the plain FFmpeg/manual paths would grab the default
-    track instead. Returns ``(video_path, audio_path)`` (``audio_path`` is None
-    when the stream turned out to be muxed after all), or None when the parallel
-    downloader can't handle the playlist and the caller should fall back.
+    Moflix is deliberately excluded: its own delivery path is already fast and
+    has provider-specific stream selection that should remain untouched.
+    Setting concurrency to one is the supported global opt-out.
     """
-    from .hls import HLSUnsupported, download_hls_parallel
+    from urllib.parse import urlparse
+
+    if ".m3u8" not in (stream_url or "").split("?", 1)[0].lower():
+        return False
+    source_host = (urlparse(getattr(owner, "url", "") or "").hostname or "").lower()
+    owner_module = type(owner).__module__.lower()
+    if "moflix_stream" in owner_module or source_host.startswith("moflix-stream."):
+        return False
+    try:
+        from .hls import get_concurrency
+
+        return get_concurrency() > 1
+    except ImportError:
+        return False
+
+
+def _try_parallel_hls(
+    stream_url,
+    temp_prefix,
+    headers,
+    audio_code,
+    ep_label,
+    *,
+    include_audio,
+    progress_end,
+):
+    """Use the bounded parallel fetcher, falling back safely on incompatibility."""
+    from .hls import HLSUnsupported, cleanup_temp_files, download_hls_parallel
 
     try:
-        written = download_hls_parallel(
+        return download_hls_parallel(
             stream_url,
             temp_prefix,
             headers=headers,
             preferred_audio_lang=audio_code,
             label=ep_label,
+            include_audio=include_audio,
+            progress_end=progress_end,
+            keep_progress=True,
         )
+    except DownloadCancelled:
+        raise
     except HLSUnsupported as exc:
-        logger.debug(f"[HLS] rendition download unsupported ({exc}); falling back")
+        logger.debug(f"[HLS] parallel download unsupported ({exc}); falling back")
+        cleanup_temp_files(temp_prefix)
+        _clear_download_progress()
         return None
-    if not written:
+    except Exception as exc:
+        # Compatibility wins over acceleration. Unsupported tags, unusual
+        # authentication and transient worker failures all retain the proven
+        # FFmpeg/manual path.
+        logger.warning(f"[HLS] parallel download unavailable ({exc}); falling back")
+        cleanup_temp_files(temp_prefix)
+        _clear_download_progress()
         return None
-    video = written[0]
-    audio = written[1] if len(written) >= 2 else None
-    return video, audio
 
 
 def _download_full_stream(
@@ -1128,13 +1177,56 @@ def _download_full_stream(
     video_codec,
     ep_label,
     audio_code,
+    parallel_hls=False,
 ):
     """Fetch audio+video into `temp_full`.
 
-    For an HLS playlist we first try the manual segment fetcher (needed for
-    hosters that disguise segments with non-media extensions); it opts out for
-    normal/encrypted playlists, which then take the FFmpeg path.
+    Suitable HLS streams first use the bounded parallel segment fetcher. Any
+    unsupported playlist falls back to the old manual/FFmpeg path unchanged.
+    Returns True when the parallel path was used.
     """
+    if parallel_hls:
+        from .hls import cleanup_temp_files
+
+        temp_prefix = temp_full.with_suffix(".hlswork")
+        written = _try_parallel_hls(
+            stream_url,
+            temp_prefix,
+            headers,
+            audio_code,
+            ep_label,
+            include_audio=True,
+            progress_end=85.0,
+        )
+        if written:
+            try:
+                if len(written) > 1:
+                    node = ffmpeg.output(
+                        ffmpeg.input(str(written[0])).video,
+                        ffmpeg.input(str(written[1])).audio,
+                        str(temp_full),
+                        vcodec=video_codec,
+                        acodec="copy",
+                        **stream_metadata,
+                    )
+                else:
+                    node = ffmpeg.input(str(written[0])).output(
+                        str(temp_full),
+                        vcodec=video_codec,
+                        acodec="copy",
+                        **stream_metadata,
+                    )
+                _run_ffmpeg_with_progress(
+                    node,
+                    label=ep_label,
+                    progress_start=85.0,
+                    progress_end=95.0,
+                    keep_progress=True,
+                )
+                return True
+            finally:
+                cleanup_temp_files(temp_prefix)
+
     if ".m3u8" in stream_url.split("?", 1)[0].lower():
         temp_ts = temp_full.with_suffix(".seg.ts")
         try:
@@ -1152,7 +1244,7 @@ def _download_full_stream(
                     ),
                     label=ep_label,
                 )
-                return
+                return False
             finally:
                 temp_ts.unlink(missing_ok=True)
 
@@ -1165,6 +1257,7 @@ def _download_full_stream(
         ),
         label=ep_label,
     )
+    return False
 
 
 def download(self):
@@ -1255,11 +1348,7 @@ def download(self):
 
                 full_stream_needed = need_audio and need_video
 
-                # Some providers (cineby's German dub) serve the wanted audio as
-                # a separate HLS rendition rather than the muxed default; the
-                # episode opts into rendition-aware fetching so we pick the right
-                # track instead of the default one.
-                select_rendition = getattr(self, "_separate_audio_rendition", False)
+                parallel_hls = _parallel_hls_enabled(self, stream_url)
 
                 temp_audio = self._episode_path.with_suffix(".temp_audio.mkv")
                 temp_video = self._episode_path.with_suffix(".temp_video.mkv")
@@ -1275,49 +1364,17 @@ def download(self):
                         stream_metadata["metadata:s:v:0"] = f"language={sub_video_code}"
 
                     video_codec = get_video_codec()
-                    rendition_done = False
-                    if select_rendition:
-                        from .hls import cleanup_temp_files
-
-                        temp_prefix = temp_full.with_suffix(".hlswork")
-                        result = _hls_rendition_download(
-                            stream_url, temp_prefix, headers, audio_code, ep_label
-                        )
-                        if result is not None:
-                            video_path, audio_path = result
-                            try:
-                                if audio_path is not None:
-                                    node = ffmpeg.output(
-                                        ffmpeg.input(str(video_path)).video,
-                                        ffmpeg.input(str(audio_path)).audio,
-                                        str(temp_full),
-                                        vcodec=video_codec,
-                                        acodec="copy",
-                                        **stream_metadata,
-                                    )
-                                else:
-                                    node = ffmpeg.input(str(video_path)).output(
-                                        str(temp_full),
-                                        vcodec=video_codec,
-                                        acodec="copy",
-                                        **stream_metadata,
-                                    )
-                                _run_ffmpeg_with_progress(node, label=ep_label)
-                                rendition_done = True
-                            finally:
-                                cleanup_temp_files(temp_prefix)
-
-                    if not rendition_done:
-                        _download_full_stream(
-                            stream_url,
-                            temp_full,
-                            input_kwargs,
-                            headers,
-                            stream_metadata,
-                            video_codec,
-                            ep_label,
-                            audio_code,
-                        )
+                    used_parallel = _download_full_stream(
+                        stream_url,
+                        temp_full,
+                        input_kwargs,
+                        headers,
+                        stream_metadata,
+                        video_codec,
+                        ep_label,
+                        audio_code,
+                        parallel_hls=parallel_hls,
+                    )
 
                     if self._episode_path.exists():
                         inputs = [
@@ -1326,14 +1383,25 @@ def download(self):
                         ]
                         output_path = self._episode_path.with_suffix(".new.mkv")
                         _run_ffmpeg_with_progress(
-                            ffmpeg.output(*inputs, str(output_path), c="copy")
+                            ffmpeg.output(*inputs, str(output_path), c="copy"),
+                            progress_start=95.0 if used_parallel else 0.0,
+                            progress_end=98.0 if used_parallel else 100.0,
+                            keep_progress=used_parallel,
                         )
                         _finalize_episode(
-                            output_path, self._episode_path, ep_label, owner=self
+                            output_path,
+                            self._episode_path,
+                            ep_label,
+                            owner=self,
+                            progress_start=98.0 if used_parallel else 0.0,
                         )
                     else:
                         _finalize_episode(
-                            temp_full, self._episode_path, ep_label, owner=self
+                            temp_full,
+                            self._episode_path,
+                            ep_label,
+                            owner=self,
+                            progress_start=95.0 if used_parallel else 0.0,
                         )
 
                     if temp_full.exists():
@@ -1343,17 +1411,22 @@ def download(self):
                 if need_audio:
                     logger.debug(f"[DOWNLOADING] audio stream via {provider_name}")
                     audio_done = False
-                    if select_rendition:
-                        # Pull just the wanted audio rendition (e.g. the German
-                        # dub) rather than the master's default track.
+                    used_parallel = False
+                    if parallel_hls:
                         from .hls import cleanup_temp_files
 
                         temp_prefix = temp_audio.with_suffix(".hlswork")
-                        result = _hls_rendition_download(
-                            stream_url, temp_prefix, headers, audio_code, ep_label
+                        result = _try_parallel_hls(
+                            stream_url,
+                            temp_prefix,
+                            headers,
+                            audio_code,
+                            ep_label,
+                            include_audio=True,
+                            progress_end=85.0,
                         )
-                        if result is not None:
-                            _, audio_path = result
+                        if result:
+                            audio_path = result[1] if len(result) > 1 else None
                             audio_src = audio_path or result[0]
                             try:
                                 _run_ffmpeg_with_progress(
@@ -1364,8 +1437,12 @@ def download(self):
                                         **{"metadata:s:a:0": f"language={audio_code}"},
                                     ),
                                     label=ep_label,
+                                    progress_start=85.0,
+                                    progress_end=95.0,
+                                    keep_progress=True,
                                 )
                                 audio_done = True
+                                used_parallel = True
                             finally:
                                 cleanup_temp_files(temp_prefix)
                     if not audio_done:
@@ -1382,19 +1459,63 @@ def download(self):
                 if need_video:
                     logger.debug(f"[DOWNLOADING] video stream via {provider_name}")
                     video_codec = get_video_codec()
-                    _run_ffmpeg_with_progress(
-                        ffmpeg.input(stream_url, **input_kwargs).output(
-                            str(temp_video),
-                            vcodec=video_codec,
-                            map="0:v:0?",
-                            **(
-                                {}
-                                if wants_clean_video
-                                else {"metadata:s:v:0": f"language={sub_video_code}"}
+                    video_done = False
+                    used_parallel = False
+                    if parallel_hls:
+                        from .hls import cleanup_temp_files
+
+                        temp_prefix = temp_video.with_suffix(".hlswork")
+                        result = _try_parallel_hls(
+                            stream_url,
+                            temp_prefix,
+                            headers,
+                            audio_code,
+                            ep_label,
+                            include_audio=False,
+                            progress_end=85.0,
+                        )
+                        if result:
+                            try:
+                                _run_ffmpeg_with_progress(
+                                    ffmpeg.input(str(result[0])).output(
+                                        str(temp_video),
+                                        vcodec=video_codec,
+                                        map="0:v:0?",
+                                        **(
+                                            {}
+                                            if wants_clean_video
+                                            else {
+                                                "metadata:s:v:0": (
+                                                    f"language={sub_video_code}"
+                                                )
+                                            }
+                                        ),
+                                    ),
+                                    label=ep_label,
+                                    progress_start=85.0,
+                                    progress_end=95.0,
+                                    keep_progress=True,
+                                )
+                                video_done = True
+                                used_parallel = True
+                            finally:
+                                cleanup_temp_files(temp_prefix)
+                    if not video_done:
+                        _run_ffmpeg_with_progress(
+                            ffmpeg.input(stream_url, **input_kwargs).output(
+                                str(temp_video),
+                                vcodec=video_codec,
+                                map="0:v:0?",
+                                **(
+                                    {}
+                                    if wants_clean_video
+                                    else {
+                                        "metadata:s:v:0": f"language={sub_video_code}"
+                                    }
+                                ),
                             ),
-                        ),
-                        label=ep_label,
-                    )
+                            label=ep_label,
+                        )
 
                 logger.debug("[MUXING] combining streams")
                 inputs = (
@@ -1410,9 +1531,18 @@ def download(self):
 
                 output_path = self._episode_path.with_suffix(".new.mkv")
                 _run_ffmpeg_with_progress(
-                    ffmpeg.output(*inputs, str(output_path), c="copy")
+                    ffmpeg.output(*inputs, str(output_path), c="copy"),
+                    progress_start=95.0 if used_parallel else 0.0,
+                    progress_end=98.0 if used_parallel else 100.0,
+                    keep_progress=used_parallel,
                 )
-                _finalize_episode(output_path, self._episode_path, ep_label, owner=self)
+                _finalize_episode(
+                    output_path,
+                    self._episode_path,
+                    ep_label,
+                    owner=self,
+                    progress_start=98.0 if used_parallel else 0.0,
+                )
 
                 for f in (temp_audio, temp_video):
                     if f.exists():

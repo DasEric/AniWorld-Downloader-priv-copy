@@ -40,7 +40,7 @@ services:
     #   ANIWORLD_UI_LANGUAGE: "en"                    # Web UI language: en | de
     #   ANIWORLD_DEBUG_MODE: "0"                      # Enable debug logging
     #   ANIWORLD_NO_AUTO_INSTALL: "0"                 # 1 = never fetch missing dependencies at runtime
-    #   ANIWORLD_HLS_CONCURRENCY: "8"                 # Parallel segment downloads for direct HLS downloads
+    #   ANIWORLD_HLS_CONCURRENCY: "8"                 # Parallel HLS segments (1 disables; Moflix is excluded)
     #   # ANIWORLD_DOWNLOAD_PATH is already set to /app/Downloads by the image;
     #   # change the volume above rather than this, or the bind mount stops matching.
 

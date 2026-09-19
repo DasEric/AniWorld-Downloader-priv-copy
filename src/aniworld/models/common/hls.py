@@ -1,10 +1,9 @@
 """Parallel HLS segment downloader.
 
-FFmpeg pulls HLS segments one at a time over a single connection, which makes
-hosters that serve `master.m3u8` (VOE above all) far slower than the available
-bandwidth allows. This module fetches the segments concurrently and writes them
-back in playlist order, producing a file FFmpeg can then remux without any
-network access.
+FFmpeg consumes HLS segments largely in sequence, which can leave bandwidth
+unused on hosters that limit an individual transfer. This module fetches a
+bounded number of segments concurrently and writes them back in playlist order,
+producing a file FFmpeg can then remux without any network access.
 
 Anything the parser does not fully understand raises `HLSUnsupported` so the
 caller can fall back to letting FFmpeg handle the stream directly.
@@ -13,6 +12,7 @@ caller can fall back to letting FFmpeg handle the stream directly.
 import os
 import re
 import struct
+import sys
 import threading
 import time
 from collections import deque
@@ -100,6 +100,25 @@ class _Key:
         self.iv = iv
 
 
+class _Segment:
+    __slots__ = ("duration", "key", "sequence", "uri")
+
+    def __init__(self, uri, key, sequence, duration):
+        self.uri = uri
+        self.key = key
+        self.sequence = sequence
+        self.duration = duration
+
+
+class _MediaPlaylist:
+    __slots__ = ("init_uri", "segments", "url")
+
+    def __init__(self, url, segments, init_uri):
+        self.url = url
+        self.segments = segments
+        self.init_uri = init_uri
+
+
 # -----------------------------------------------------------------------------
 # HTTP
 # -----------------------------------------------------------------------------
@@ -123,6 +142,10 @@ def _default_headers(headers):
     merged = {"User-Agent": DEFAULT_USER_AGENT}
     if headers:
         merged.update(headers)
+    # Segment payloads are media bytes. Disabling content encoding keeps the
+    # byte counter identical to what was actually transferred and avoids doing
+    # pointless compression work in every worker.
+    merged.setdefault("Accept-Encoding", "identity")
     return merged
 
 
@@ -132,21 +155,40 @@ def _fetch_text(url, headers):
     return resp.text
 
 
-def _fetch_bytes(url, headers):
-    """Fetch a URL, retrying transient failures."""
+def _fetch_bytes(url, headers, on_bytes=None, check_cancelled=None):
+    """Fetch a URL, retrying transient failures and reporting wire bytes."""
     last_error = None
     for attempt in range(SEGMENT_RETRIES):
+        response = None
         try:
-            resp = _session().get(url, headers=headers, timeout=SEGMENT_TIMEOUT)
-            resp.raise_for_status()
-            content = resp.content
+            if check_cancelled:
+                check_cancelled()
+            response = _session().get(
+                url, headers=headers, timeout=SEGMENT_TIMEOUT, stream=True
+            )
+            response.raise_for_status()
+            chunks = []
+            for chunk in response.iter_content(chunk_size=256 * 1024):
+                if not chunk:
+                    continue
+                if check_cancelled:
+                    check_cancelled()
+                chunks.append(chunk)
+                if on_bytes:
+                    on_bytes(len(chunk))
+            content = b"".join(chunks)
             if not content:
                 raise ValueError("empty response body")
             return content
         except Exception as err:
+            if isinstance(err, _common().DownloadCancelled):
+                raise
             last_error = err
             if attempt < SEGMENT_RETRIES - 1:
                 time.sleep(2**attempt)
+        finally:
+            if response is not None:
+                response.close()
     raise RuntimeError(f"failed to fetch {url}: {last_error}") from last_error
 
 
@@ -265,7 +307,7 @@ def rendition_languages(master_text, base_url=""):
 
 
 def _parse_media_playlist(text, base_url):
-    """Return (segments, init_uri) where each segment is (uri, key, sequence)."""
+    """Return the finite media segments and their optional init segment."""
     if "#EXT-X-ENDLIST" not in text:
         raise HLSUnsupported("live playlist (no EXT-X-ENDLIST)")
 
@@ -273,6 +315,7 @@ def _parse_media_playlist(text, base_url):
     init_uri = None
     current_key = None
     sequence = 0
+    duration = None
 
     for raw_line in text.splitlines():
         line = raw_line.strip()
@@ -288,6 +331,12 @@ def _parse_media_playlist(text, base_url):
         elif line.startswith("#EXT-X-BYTERANGE"):
             raise HLSUnsupported("byte-range segments")
 
+        elif line.startswith("#EXTINF:"):
+            try:
+                duration = float(line.split(":", 1)[1].split(",", 1)[0])
+            except ValueError:
+                duration = None
+
         elif line.startswith("#EXT-X-MAP:"):
             attrs = _parse_attributes(line)
             uri = attrs.get("URI")
@@ -295,7 +344,10 @@ def _parse_media_playlist(text, base_url):
                 raise HLSUnsupported("EXT-X-MAP without URI")
             if "BYTERANGE" in attrs:
                 raise HLSUnsupported("byte-range init segment")
-            init_uri = urljoin(base_url, uri)
+            resolved = urljoin(base_url, uri)
+            if init_uri is not None and resolved != init_uri:
+                raise HLSUnsupported("playlist changes its init segment")
+            init_uri = resolved
 
         elif line.startswith("#EXT-X-KEY:"):
             attrs = _parse_attributes(line)
@@ -311,8 +363,16 @@ def _parse_media_playlist(text, base_url):
                 raise HLSUnsupported(f"encryption method {method}")
 
         elif not line.startswith("#"):
-            segments.append((urljoin(base_url, line), current_key, sequence))
+            segments.append(
+                _Segment(
+                    uri=urljoin(base_url, line),
+                    key=current_key,
+                    sequence=sequence,
+                    duration=duration,
+                )
+            )
             sequence += 1
+            duration = None
 
     if not segments:
         raise HLSUnsupported("playlist contains no segments")
@@ -365,42 +425,115 @@ def _publish_progress(**fields):
 
 
 class _ProgressTracker:
-    def __init__(self, total_segments, label):
-        self.total = total_segments
+    """Thread-safe progress based on completed media time and received bytes."""
+
+    def __init__(self, playlists, label, progress_end=100.0):
+        self.total = sum(len(item.segments) for item in playlists)
+        durations = [
+            segment.duration
+            for item in playlists
+            for segment in item.segments
+            if segment.duration is not None
+        ]
+        self._use_duration = len(durations) == self.total
+        self._total_work = sum(durations) if self._use_duration else float(self.total)
+        self._done_work = 0.0
+        self._progress_end = max(0.0, min(float(progress_end), 100.0))
         self.label = label
         self.done = 0
-        self.bytes_written = 0
+        self.bytes_received = 0
         self._common = _common()
-        self._last_bytes = 0
-        self._last_tick = time.monotonic()
+        self._lock = threading.Lock()
+        self._samples = deque([(time.monotonic(), 0)])
+        self._last_publish = 0.0
+        self._last_cancel_check = 0.0
         self._bandwidth = ""
+        self._queue_id = None
+        try:
+            from ...playwright.captcha import _local
 
-    def advance(self, chunk_size):
-        self.done += 1
-        self.bytes_written += chunk_size
+            self._queue_id = getattr(_local, "queue_id", None)
+        except Exception:
+            pass
 
+    def check_cancelled(self):
+        """Raise the downloader's cancellation exception for a forced stop."""
         now = time.monotonic()
-        elapsed = now - self._last_tick
-        if elapsed > 0.5:
-            per_second = (self.bytes_written - self._last_bytes) / elapsed
-            if per_second > 0:
-                self._bandwidth = f"{per_second / 1024 / 1024:.1f} MB/s"
-            self._last_bytes = self.bytes_written
-            self._last_tick = now
+        with self._lock:
+            if now - self._last_cancel_check < 0.5:
+                return
+            self._last_cancel_check = now
+        if self._queue_id is None:
+            return
+        try:
+            from ...web.db import is_queue_force_cancelled
 
-        percent = round(self.done / self.total * 100, 1) if self.total else 0.0
-        counter = f"{self.done}/{self.total}"
+            if is_queue_force_cancelled(self._queue_id):
+                raise self._common.DownloadCancelled("Download cancelled")
+        except self._common.DownloadCancelled:
+            raise
+        except Exception:
+            # CLI use and tests do not necessarily initialise the web database.
+            return
+
+    def received(self, size):
+        """Record actual response-body bytes from any worker thread."""
+        now = time.monotonic()
+        with self._lock:
+            self.bytes_received += size
+            self._samples.append((now, self.bytes_received))
+            # Keep at least two samples so even the first received chunk can
+            # produce a rate after a slow connection setup.
+            while len(self._samples) > 2 and now - self._samples[0][0] > 3.0:
+                self._samples.popleft()
+            started, start_bytes = self._samples[0]
+            elapsed = now - started
+            if elapsed > 0:
+                rate = (self.bytes_received - start_bytes) / elapsed
+                if rate > 0:
+                    self._bandwidth = f"{rate / 1024 / 1024:.1f} MB/s"
+            should_publish = now - self._last_publish >= 0.25
+            if should_publish:
+                self._last_publish = now
+        if should_publish:
+            self._publish()
+
+    def complete(self, segment):
+        with self._lock:
+            self.done += 1
+            self._done_work += (
+                segment.duration if self._use_duration else 1.0
+            )
+        self._publish(force=True)
+
+    def finish(self):
+        with self._lock:
+            self.done = self.total
+            self._done_work = self._total_work
+        self._publish(force=True)
+
+    def _publish(self, force=False):
+        with self._lock:
+            fraction = (
+                self._done_work / self._total_work if self._total_work > 0 else 0.0
+            )
+            percent = round(min(fraction, 1.0) * self._progress_end, 1)
+            counter = f"{self.done}/{self.total}"
+            bandwidth = self._bandwidth
 
         with self._common._ffmpeg_progress_lock:
             self._common._ffmpeg_progress.update(
                 percent=percent,
                 time=f"{counter} segments",
                 speed="",
-                bandwidth=self._bandwidth,
+                bandwidth=bandwidth,
                 active=True,
             )
 
-        self._common._print_cli_progress(percent, counter, self._bandwidth, self.label)
+        if sys.stderr.isatty():
+            self._common._print_cli_progress(
+                percent, counter, bandwidth, self.label
+            )
 
 
 # -----------------------------------------------------------------------------
@@ -408,20 +541,24 @@ class _ProgressTracker:
 # -----------------------------------------------------------------------------
 
 
-def _download_playlist(playlist_url, headers, temp_prefix, suffix, tracker_factory):
+def _load_media_playlist(playlist_url, headers):
+    text = _fetch_text(playlist_url, headers)
+    if "#EXT-X-STREAM-INF" in text:
+        raise HLSUnsupported("expected a media playlist, got a master playlist")
+    segments, init_uri = _parse_media_playlist(text, playlist_url)
+    return _MediaPlaylist(playlist_url, segments, init_uri)
+
+
+def _download_playlist(playlist, headers, temp_prefix, suffix, tracker):
     """Fetch every segment of a media playlist, in order, into one file.
 
     Returns the path written. The extension reflects the segment container so
     FFmpeg picks the right demuxer: `.mp4` for fMP4 (an EXT-X-MAP init segment
     is present), `.ts` for MPEG-TS.
     """
-    text = _fetch_text(playlist_url, headers)
-    if "#EXT-X-STREAM-INF" in text:
-        raise HLSUnsupported("expected a media playlist, got a master playlist")
-
-    segments, init_uri = _parse_media_playlist(text, playlist_url)
-    output_path = temp_prefix.with_suffix(f"{suffix}{'.mp4' if init_uri else '.ts'}")
-    tracker = tracker_factory(len(segments))
+    output_path = temp_prefix.with_suffix(
+        f"{suffix}{'.mp4' if playlist.init_uri else '.ts'}"
+    )
     concurrency = get_concurrency()
 
     key_cache = {}
@@ -431,7 +568,12 @@ def _download_playlist(playlist_url, headers, temp_prefix, suffix, tracker_facto
         with key_cache_lock:
             if uri in key_cache:
                 return key_cache[uri]
-        data = _fetch_bytes(uri, headers)
+        data = _fetch_bytes(
+            uri,
+            headers,
+            on_bytes=tracker.received,
+            check_cancelled=tracker.check_cancelled,
+        )
         if len(data) != 16:
             raise HLSUnsupported(f"AES key has {len(data)} bytes, expected 16")
         with key_cache_lock:
@@ -439,23 +581,38 @@ def _download_playlist(playlist_url, headers, temp_prefix, suffix, tracker_facto
         return data
 
     def _fetch_segment(segment):
-        uri, key, sequence = segment
-        data = _fetch_bytes(uri, headers)
-        if key is None:
+        data = _fetch_bytes(
+            segment.uri,
+            headers,
+            on_bytes=tracker.received,
+            check_cancelled=tracker.check_cancelled,
+        )
+        if segment.key is None:
             return data
-        return _decrypt_segment(data, _key_bytes(key.uri), _resolve_iv(key, sequence))
+        return _decrypt_segment(
+            data,
+            _key_bytes(segment.key.uri),
+            _resolve_iv(segment.key, segment.sequence),
+        )
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
     with open(output_path, "wb") as handle:
-        if init_uri:
-            handle.write(_fetch_bytes(init_uri, headers))
+        if playlist.init_uri:
+            handle.write(
+                _fetch_bytes(
+                    playlist.init_uri,
+                    headers,
+                    on_bytes=tracker.received,
+                    check_cancelled=tracker.check_cancelled,
+                )
+            )
 
         if concurrency == 1:
-            for segment in segments:
+            for segment in playlist.segments:
                 chunk = _fetch_segment(segment)
                 handle.write(chunk)
-                tracker.advance(len(chunk))
+                tracker.complete(segment)
             return output_path
 
         # Keep a bounded window of in-flight segments so memory stays flat
@@ -465,16 +622,19 @@ def _download_playlist(playlist_url, headers, temp_prefix, suffix, tracker_facto
         next_index = 0
 
         with ThreadPoolExecutor(max_workers=concurrency) as pool:
-            while next_index < len(segments) and len(pending) < window:
-                pending.append(pool.submit(_fetch_segment, segments[next_index]))
+            while next_index < len(playlist.segments) and len(pending) < window:
+                segment = playlist.segments[next_index]
+                pending.append((segment, pool.submit(_fetch_segment, segment)))
                 next_index += 1
 
             while pending:
-                chunk = pending.popleft().result()
+                segment, future = pending.popleft()
+                chunk = future.result()
                 handle.write(chunk)
-                tracker.advance(len(chunk))
-                if next_index < len(segments):
-                    pending.append(pool.submit(_fetch_segment, segments[next_index]))
+                tracker.complete(segment)
+                if next_index < len(playlist.segments):
+                    segment = playlist.segments[next_index]
+                    pending.append((segment, pool.submit(_fetch_segment, segment)))
                     next_index += 1
 
     return output_path
@@ -486,6 +646,9 @@ def download_hls_parallel(
     headers=None,
     preferred_audio_lang=None,
     label="",
+    include_audio=True,
+    progress_end=100.0,
+    keep_progress=False,
 ):
     """Download an HLS stream into local files ready for an FFmpeg remux.
 
@@ -516,8 +679,12 @@ def download_hls_parallel(
         variant = max(variants, key=lambda item: item.bandwidth)
         video_playlist = variant.uri
 
-        rendition = _select_audio_rendition(
-            renditions, variant.audio_group, preferred_audio_lang
+        rendition = (
+            _select_audio_rendition(
+                renditions, variant.audio_group, preferred_audio_lang
+            )
+            if include_audio
+            else None
         )
         if rendition is not None:
             audio_playlist = rendition.uri
@@ -525,36 +692,42 @@ def download_hls_parallel(
                 f"[HLS] separate audio rendition: {rendition.name or rendition.language}"
             )
 
+    video_media = _load_media_playlist(video_playlist, headers)
+    audio_media = (
+        _load_media_playlist(audio_playlist, headers)
+        if include_audio and audio_playlist
+        else None
+    )
+    playlists = [video_media] + ([audio_media] if audio_media else [])
+    tracker = _ProgressTracker(playlists, label, progress_end=progress_end)
     written = []
+    succeeded = False
     try:
         _publish_progress(percent=0.0, time="", speed="", bandwidth="", active=True)
-
-        def _video_tracker(total):
-            return _ProgressTracker(total, label)
-
         written.append(
             _download_playlist(
-                video_playlist, headers, temp_prefix, ".hls_video", _video_tracker
+                video_media, headers, temp_prefix, ".hls_video", tracker
             )
         )
 
-        if audio_playlist:
-
-            def _audio_tracker(total):
-                return _ProgressTracker(total, f"{label} (audio)" if label else "audio")
-
+        if audio_media:
             written.append(
                 _download_playlist(
-                    audio_playlist, headers, temp_prefix, ".hls_audio", _audio_tracker
+                    audio_media, headers, temp_prefix, ".hls_audio", tracker
                 )
             )
 
+        tracker.finish()
+        succeeded = True
         return written
     except Exception:
         cleanup_temp_files(temp_prefix)
         raise
     finally:
-        _publish_progress(percent=0.0, time="", speed="", bandwidth="", active=False)
+        if not (succeeded and keep_progress):
+            _publish_progress(
+                percent=0.0, time="", speed="", bandwidth="", active=False
+            )
 
 
 def cleanup_temp_files(temp_prefix):
