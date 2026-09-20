@@ -324,6 +324,31 @@ def test_non_separated_library_checks_each_files_language(monkeypatch, downloads
     assert autosync.episodes_in_folder(folder, "English Dub") == {(1, 2)}
 
 
+def test_unknown_file_language_does_not_redownload_decorated_silo_folder(
+    monkeypatch, downloads
+):
+    folder = downloads / "Silo (2023) [imdbid-tt14688458]" / "Season 01"
+    folder.mkdir(parents=True)
+    for number in (1, 2):
+        (folder / f"Silo S01E{number:03d}.mkv").write_bytes(b"video")
+
+    monkeypatch.setattr(autosync, "languages_from_probe", lambda _path: set())
+    assert autosync.episodes_in_folder(folder.parent, "German Dub") == {
+        (1, 1),
+        (1, 2),
+    }
+
+    row = add_row(title="Silo")
+    monkeypatch.setattr(
+        autosync,
+        "_remote_inventory",
+        lambda _url, _language: (FakeSeries("Silo"), inventory(2)),
+    )
+    result = autosync._handle(row)
+    assert result["status"] == "up-to-date"
+    assert db.get_queue() == []
+
+
 def test_a_deleted_destination_fails_closed(monkeypatch, tmp_path):
     path_id = db.add_custom_path("Gone", str(tmp_path / "gone"))
     row = add_row(path_id=path_id)

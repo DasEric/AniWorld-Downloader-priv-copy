@@ -208,7 +208,7 @@ def _matching_folders(base, title):
 
 
 def episodes_in_folder(folder, language=None):
-    """Episode numbers in one title folder, optionally verified by file language."""
+    """Episode numbers in a title folder, rejecting only a known wrong language."""
     from .library import VIDEO_EXTENSIONS
     from .media import EPISODE_RE
 
@@ -226,8 +226,13 @@ def episodes_in_folder(folder, language=None):
         match = EPISODE_RE.search(file.name)
         if not match:
             continue
-        if language and language not in languages_from_probe(file):
-            continue
+        if language:
+            detected_languages = languages_from_probe(file)
+            # An absent/failed language probe must not make Auto-Sync queue an
+            # episode that is visibly already on disk. Only reject the file
+            # when its metadata positively identifies a different language.
+            if detected_languages and language not in detected_languages:
+                continue
         found.add((int(match.group(1)), int(match.group(2))))
     return found
 
