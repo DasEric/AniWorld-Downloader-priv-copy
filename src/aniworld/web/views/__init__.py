@@ -38,6 +38,7 @@ ADMIN_ENDPOINTS = {
     "api.autosync_status",
     "api.autosync_run",
     "api.list_series",
+    "api.series_state",
     "api.add_series",
     "api.update_series",
     "api.delete_series",

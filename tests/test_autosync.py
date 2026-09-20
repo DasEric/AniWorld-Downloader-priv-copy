@@ -59,6 +59,17 @@ def test_tracked_series_round_trip_and_duplicate_protection():
         add_row()
 
 
+def test_find_tracked_series_uses_language_and_destination(tmp_path):
+    default = add_row()
+    path_id = db.add_custom_path("Other", str(tmp_path / "other"))
+    custom = add_row(language="English Dub", path_id=path_id)
+
+    assert db.find_autosync_series(AW, "German Dub")["id"] == default["id"]
+    assert db.find_autosync_series(AW, "English Dub", path_id)["id"] == custom["id"]
+    assert db.find_autosync_series(AW, "English Dub") is None
+    assert db.find_autosync_series(AW, "German Dub", path_id) is None
+
+
 def test_same_series_can_track_two_languages_and_paths(tmp_path, monkeypatch):
     monkeypatch.setenv("ANIWORLD_LANG_SEPARATION", "1")
     path_id = db.add_custom_path("Other", str(tmp_path / "other"))
@@ -378,6 +389,53 @@ def test_series_api_lists_adds_pauses_and_removes(client, monkeypatch):
     assert client.delete(f"/api/autosync/series/{row_id}").status_code == 200
 
 
+def test_series_state_api_matches_the_modal_selection(client, monkeypatch, tmp_path):
+    monkeypatch.setenv("ANIWORLD_ENABLE_AUTOSYNC", "1")
+    path_id = db.add_custom_path("Series", str(tmp_path / "series"))
+    row = add_row(
+        url=STO,
+        site="sto",
+        title="Dark",
+        language="English Dub",
+        path_id=path_id,
+        enabled=False,
+    )
+
+    response = client.get(
+        "/api/autosync/series/state",
+        query_string={
+            "url": "https://s.to/serie/stream/dark/",
+            "language": "English Dub",
+            "custom_path_id": path_id,
+        },
+    )
+    assert response.status_code == 200
+    assert response.get_json()["tracked"] is True
+    assert response.get_json()["series"]["id"] == row["id"]
+    assert response.get_json()["series"]["enabled"] == 0
+
+    unmatched = client.get(
+        "/api/autosync/series/state",
+        query_string={"url": STO, "language": "German Dub"},
+    )
+    assert unmatched.status_code == 200
+    assert unmatched.get_json() == {"series": None, "tracked": False}
+
+
+@pytest.mark.parametrize("path_id", ["nope", "0", "-1"])
+def test_series_state_api_rejects_invalid_path_id(client, monkeypatch, path_id):
+    monkeypatch.setenv("ANIWORLD_ENABLE_AUTOSYNC", "1")
+    response = client.get(
+        "/api/autosync/series/state",
+        query_string={
+            "url": AW,
+            "language": "German Dub",
+            "custom_path_id": path_id,
+        },
+    )
+    assert response.status_code == 400
+
+
 @pytest.mark.parametrize(
     "payload",
     [
@@ -435,6 +493,12 @@ def test_autosync_page_explains_the_explicit_list(client, monkeypatch):
     assert "checks only the series" in body
     assert "SerienStream" in body
     assert "new episodes" in body
+
+
+def test_series_modal_uses_an_autosync_checkbox(client):
+    body = client.get("/").get_data(as_text=True)
+    assert 'type="checkbox" id="autosyncToggle"' in body
+    assert 'id="addAutosyncBtn"' not in body
 
 
 def _ran(hours_ago):

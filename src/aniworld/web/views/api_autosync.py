@@ -17,6 +17,7 @@ def register(bp):
     bp.add_url_rule("/autosync/run", view_func=autosync_run, methods=["POST"])
     bp.add_url_rule("/autosync/series", view_func=list_series)
     bp.add_url_rule("/autosync/series", view_func=add_series, methods=["POST"])
+    bp.add_url_rule("/autosync/series/state", view_func=series_state)
     bp.add_url_rule(
         "/autosync/series/<int:series_id>",
         view_func=update_series,
@@ -76,6 +77,26 @@ def _run_quietly():
 def list_series():
     _guard()
     return jsonify({"series": db.get_autosync_series()})
+
+
+def series_state():
+    """Return the row represented by the series modal's current selections."""
+    _guard()
+    series_url = request.args.get("url")
+    language = (request.args.get("language") or "").strip()
+    raw_path_id = request.args.get("custom_path_id")
+    try:
+        canonical_url, site = autosync.canonical_series_url(series_url)
+        if language not in autosync.SITE_LANGUAGES[site]:
+            raise ValueError(f"Language {language!r} is not supported for this site.")
+        custom_path_id = None if raw_path_id in (None, "") else int(raw_path_id)
+        if custom_path_id is not None and custom_path_id <= 0:
+            raise ValueError("custom_path_id must be a positive integer.")
+    except (TypeError, ValueError) as exc:
+        return jsonify({"error": str(exc)}), 400
+
+    item = db.find_autosync_series(canonical_url, language, custom_path_id)
+    return jsonify({"tracked": item is not None, "series": item})
 
 
 def add_series():

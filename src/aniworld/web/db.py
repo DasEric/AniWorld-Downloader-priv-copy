@@ -847,6 +847,20 @@ def get_autosync_series_item(series_id):
         )
 
 
+def find_autosync_series(series_url, language, custom_path_id=None):
+    """Find the subscription represented by one modal checkbox."""
+    with session() as conn:
+        return _row(
+            conn,
+            "SELECT s.*, p.name AS custom_path_name "
+            "FROM autosync_series AS s "
+            "LEFT JOIN custom_paths AS p ON p.id = s.custom_path_id "
+            "WHERE s.series_url = ? AND s.language = ? "
+            "AND s.custom_path_id IS ?",
+            (series_url, language, custom_path_id),
+        )
+
+
 def add_autosync_series(
     *,
     series_url,

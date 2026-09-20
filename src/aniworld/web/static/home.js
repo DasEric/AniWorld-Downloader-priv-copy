@@ -24,7 +24,7 @@
   const customPathRow = el("customPathRow");
   const customPathSelect = el("customPathSelect");
   const autosyncRow = el("autosyncRow");
-  const addAutosyncBtn = el("addAutosyncBtn");
+  const autosyncToggle = el("autosyncToggle");
   const accordion = el("seasonAccordion");
   const episodeSpinner = el("episodeSpinner");
   const selectAll = el("selectAll");
@@ -75,6 +75,9 @@
   let episodeCache = {};
   let episodeLoads = {};
   let availableProviders = null;
+  let autosyncEntryId = null;
+  let autosyncStateToken = 0;
+  let autosyncMutating = false;
 
   const isHanime = (url) => url.includes("hanime.tv/");
   const isMangaFire = (url) => url.includes("mangafire.to/");
@@ -375,11 +378,13 @@
   });
 
   /* ===== Custom paths ===== */
-  async function loadCustomPaths() {
+  async function loadCustomPaths(token, site) {
     try {
       const data = await apiFetch("/api/custom-paths");
+      if (token !== openToken) return;
       customPaths = data.paths || [];
     } catch (e) {
+      if (token !== openToken) return;
       customPaths = [];
     }
 
@@ -394,7 +399,7 @@
 
     // Pre-select a path that was marked as the default for this site
     const preferred = customPaths.find((path) =>
-      (path.default_sites || "").split(",").includes(currentSite)
+      (path.default_sites || "").split(",").includes(site)
     );
     customPathSelect.value = preferred ? String(preferred.id) : "";
   }
@@ -426,6 +431,12 @@
     episodeCache = {};
     episodeLoads = {};
     availableProviders = null;
+    autosyncEntryId = null;
+    autosyncStateToken += 1;
+    if (autosyncToggle) {
+      autosyncToggle.checked = false;
+      autosyncToggle.disabled = true;
+    }
   }
 
   function rebuildLanguageOptions() {
@@ -484,7 +495,11 @@
     }
   }
 
-  languageSelect.addEventListener("change", updateProviderSelect);
+  languageSelect.addEventListener("change", () => {
+    updateProviderSelect();
+    refreshAutosyncState();
+  });
+  customPathSelect.addEventListener("change", refreshAutosyncState);
 
   async function openSeries(url) {
     const token = ++openToken;
@@ -502,7 +517,7 @@
       rebuildLanguageOptions();
       fillProviderSelect(["megakino", "moflix"].includes(currentSite) ? [] : window.STATIC_PROVIDERS);
     }
-    loadCustomPaths();
+    const customPathsPromise = loadCustomPaths(token, currentSite);
     showAutosyncAction();
 
     try {
@@ -531,6 +546,10 @@
         if (token !== openToken) return;
       }
 
+      await customPathsPromise;
+      if (token !== openToken) return;
+      await refreshAutosyncState();
+      if (token !== openToken) return;
       showSkeleton(false);
     } catch (error) {
       if (token !== openToken) return;
@@ -546,24 +565,75 @@
 
   function showAutosyncAction() {
     if (!autosyncRow) return;
-    autosyncRow.hidden = !window.AUTOSYNC_ENABLED || !["aniworld", "sto"].includes(currentSite);
+    const supported = window.AUTOSYNC_ENABLED && ["aniworld", "sto"].includes(currentSite);
+    autosyncRow.hidden = !supported;
+    if (!supported && autosyncToggle) {
+      autosyncEntryId = null;
+      autosyncToggle.checked = false;
+      autosyncToggle.disabled = true;
+    }
   }
 
-  if (addAutosyncBtn) {
-    addAutosyncBtn.addEventListener("click", async () => {
-      addAutosyncBtn.disabled = true;
+  async function refreshAutosyncState() {
+    if (!autosyncToggle || autosyncRow.hidden || !seriesUrl || !languageSelect.value) return;
+
+    const requestToken = ++autosyncStateToken;
+    autosyncToggle.disabled = true;
+    const params = new URLSearchParams({
+      url: seriesUrl,
+      language: languageSelect.value
+    });
+    if (customPathSelect.value) params.set("custom_path_id", customPathSelect.value);
+
+    try {
+      const data = await apiFetch(`/api/autosync/series/state?${params}`);
+      if (requestToken !== autosyncStateToken) return;
+      autosyncEntryId = data.series ? data.series.id : null;
+      autosyncToggle.checked = Boolean(data.tracked);
+      if (data.series && data.series.provider) {
+        const storedProvider = Array.from(providerSelect.options).find(
+          (option) => option.value === data.series.provider
+        );
+        if (storedProvider) providerSelect.value = storedProvider.value;
+      }
+    } catch (error) {
+      if (requestToken !== autosyncStateToken) return;
+      autosyncEntryId = null;
+      autosyncToggle.checked = false;
+      showToast(error.message);
+    } finally {
+      if (requestToken === autosyncStateToken && !autosyncMutating) {
+        autosyncToggle.disabled = false;
+      }
+    }
+  }
+
+  if (autosyncToggle) {
+    autosyncToggle.addEventListener("change", async () => {
+      if (autosyncMutating) return;
+      const shouldTrack = autosyncToggle.checked;
+      const entryId = autosyncEntryId;
+      autosyncMutating = true;
+      autosyncToggle.disabled = true;
       try {
-        await apiSend("/api/autosync/series", "POST", {
-          series_url: seriesUrl,
-          language: languageSelect.value,
-          provider: providerSelect.value,
-          custom_path_id: customPathSelect.value ? Number(customPathSelect.value) : null
-        });
-        showToast(t("autosync.added_series", "Series added to Auto-Sync"));
+        if (shouldTrack) {
+          await apiSend("/api/autosync/series", "POST", {
+            series_url: seriesUrl,
+            language: languageSelect.value,
+            provider: providerSelect.value,
+            custom_path_id: customPathSelect.value ? Number(customPathSelect.value) : null
+          });
+          showToast(t("autosync.added_series", "Series added to Auto-Sync"));
+        } else if (entryId !== null) {
+          await apiSend(`/api/autosync/series/${entryId}`, "DELETE");
+          showToast(t("index.autosync_removed", "Series removed from Auto-Sync"));
+        }
       } catch (error) {
         showToast(error.message);
       } finally {
-        addAutosyncBtn.disabled = false;
+        await refreshAutosyncState();
+        autosyncMutating = false;
+        if (!autosyncRow.hidden) autosyncToggle.disabled = false;
       }
     });
   }

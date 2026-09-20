@@ -151,6 +151,7 @@ def test_a_write_key_can_queue_a_download(client, api_key):
         ("post", "/api/custom-paths"),
         ("get", "/api/autosync/status"),
         ("get", "/api/autosync/series"),
+        ("get", "/api/autosync/series/state?url=x&language=x"),
         ("post", "/api/autosync/series"),
         ("patch", "/api/autosync/series/1"),
         ("delete", "/api/autosync/series/1"),

@@ -292,8 +292,9 @@
       "autosync.started": "Synchronisierung gestartet",
       "autosync.result": "{queued} von {checked} eingereiht",
       "autosync.queued_episodes": "{count} Episoden in {language} eingereiht",
-      "index.autosync_add": "Zu Auto-Sync hinzufügen",
-      "index.autosync_add_hint": "Verwendet die aktuell gewählte Sprache, den Hoster und den Zielpfad.",
+      "index.autosync_enable": "Diese Serie zu Auto-Sync hinzufügen",
+      "index.autosync_add_hint": "Beim Aktivieren werden die aktuell gewählte Sprache, der Hoster und der Zielpfad verwendet.",
+      "index.autosync_removed": "Serie aus Auto-Sync entfernt",
       "settings.enable_library_hint":
         "Zeigt den Bibliothek-Tab zum Durchsehen und Löschen heruntergeladener Dateien.",
       "settings.language": "Sprache",
