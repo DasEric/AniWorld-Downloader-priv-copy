@@ -12,45 +12,11 @@
   <section class="card">
     <h2 data-i18n="autosync.how_title">How it works</h2>
     <p class="hint" data-i18n="autosync.how_note">
-      Auto-Sync checks only the series you add below. Each entry applies to exactly one language and destination;
-      AniWorld and SerienStream are checked directly. It neither scans your complete library nor waits for a
-      “new episodes” page.
+      Auto-Sync checks only the series you select in their series window. Each entry applies to exactly one language
+      and destination; AniWorld and SerienStream are checked directly. It neither scans your complete library nor
+      waits for a “new episodes” page.
     </p>
     <div class="notice" id="syncModeNotice"></div>
-  </section>
-
-  <section class="card">
-    <h2 data-i18n="autosync.add_title">Add a series</h2>
-    <div class="control-row">
-      <label class="field">
-        <span class="field-label" data-i18n="autosync.source">Source</span>
-        <select id="seriesSite">
-          <option value="aniworld">AniWorld</option>
-          <option value="sto">SerienStream</option>
-        </select>
-      </label>
-      <label class="field">
-        <span class="field-label" data-i18n="autosync.language">Language</span>
-        <select id="seriesLanguage"></select>
-      </label>
-      <label class="field">
-        <span class="field-label" data-i18n="autosync.provider">Hoster</span>
-        <select id="seriesProvider"></select>
-      </label>
-      <label class="field">
-        <span class="field-label" data-i18n="autosync.destination">Destination</span>
-        <select id="seriesPath"><option value="" data-i18n="index.default">Default</option></select>
-      </label>
-    </div>
-    <div class="inline-form">
-      <input type="text" id="seriesSearch" placeholder="Search for a series ..." autocomplete="off"
-        data-i18n-placeholder="autosync.search_placeholder" />
-      <button class="btn btn-primary" id="seriesSearchBtn" data-i18n="index.search">Search</button>
-    </div>
-    <p class="hint" data-i18n="autosync.add_hint">
-      Adding records the current state of the selected language. It does not start a download yet.
-    </p>
-    <div id="seriesResults" class="exclude-results"></div>
   </section>
 
   <section class="card">
@@ -83,5 +49,5 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="{{ url_for('static', filename='autosync.js') }}?v={{ app_version }}"></script>
+<script src="{{ url_for('static', filename='autosync.js') }}?v={{ app_version }}-tracked-list"></script>
 {% endblock %}

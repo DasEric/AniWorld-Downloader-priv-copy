@@ -225,8 +225,8 @@
       </label>
     </div>
 
-    {% if is_admin %}
-    <div class="control-row" id="autosyncRow" hidden>
+    {% if autosync_enabled and is_admin %}
+    <div class="control-row" id="autosyncRow">
       <label class="checkbox">
         <input type="checkbox" id="autosyncToggle" />
         <span data-i18n="index.autosync_enable">Add this series to Auto-Sync</span>
@@ -276,5 +276,5 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="{{ url_for('static', filename='home.js') }}?v={{ app_version }}"></script>
+<script src="{{ url_for('static', filename='home.js') }}?v={{ app_version }}-autosync-checkbox"></script>
 {% endblock %}

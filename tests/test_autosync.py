@@ -493,12 +493,21 @@ def test_autosync_page_explains_the_explicit_list(client, monkeypatch):
     assert "checks only the series" in body
     assert "SerienStream" in body
     assert "new episodes" in body
+    assert 'id="seriesSite"' not in body
+    assert 'id="seriesSearch"' not in body
 
 
-def test_series_modal_uses_an_autosync_checkbox(client):
+def test_series_modal_uses_an_autosync_checkbox(client, monkeypatch):
+    monkeypatch.setenv("ANIWORLD_ENABLE_AUTOSYNC", "1")
     body = client.get("/").get_data(as_text=True)
     assert 'type="checkbox" id="autosyncToggle"' in body
+    assert 'id="autosyncRow" hidden' not in body
     assert 'id="addAutosyncBtn"' not in body
+
+
+def test_series_modal_hides_autosync_when_the_feature_is_disabled(client):
+    body = client.get("/").get_data(as_text=True)
+    assert 'id="autosyncToggle"' not in body
 
 
 def _ran(hours_ago):

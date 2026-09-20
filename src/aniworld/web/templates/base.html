@@ -16,7 +16,7 @@
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.3.1/css/all.min.css"
     integrity="sha384-qrALq7+6jBOZIQsNnT6xGkMDru64qD6uTlDra39xrt2SoXl4pO3FX6Roz/RpR/BS"
     crossorigin="anonymous" referrerpolicy="no-referrer" />
-  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v={{ app_version }}" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v={{ app_version }}-autosync-checkbox" />
   {# ?nocss=1 is the way back in when a theme hides the settings page #}
   {% if custom_css_version and request.args.get('nocss') != '1' %}
   <link rel="stylesheet" data-custom-css href="{{ url_for('pages.custom_css') }}?v={{ custom_css_version }}" />
@@ -24,7 +24,7 @@
   <script>
     window.UI_LANGUAGE = {{ ui_language | tojson }};
   </script>
-  <script src="{{ url_for('static', filename='i18n.js') }}?v={{ app_version }}"></script>
+  <script src="{{ url_for('static', filename='i18n.js') }}?v={{ app_version }}-autosync-checkbox"></script>
   {% block head %}{% endblock %}
 </head>
 
