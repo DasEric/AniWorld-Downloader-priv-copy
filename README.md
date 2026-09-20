@@ -61,7 +61,7 @@ Full guides and troubleshooting live in the [documentation](https://www.phoenixt
 - Stream through mpv, IINA, or Syncplay
 - Search several catalogues from one Web UI
 - Queue downloads and keep an eye on their progress
-- Keep series current with Auto-Sync
+- Keep selected AniWorld and SerienStream series current with Auto-Sync
 - Watch for planned releases and download them when they appear
 - Choose German Dub, English Dub, English Sub, or German Sub when available
 - Fall back to another stream hoster when the selected one fails
@@ -173,7 +173,7 @@ env_file:
   - ./.env
 ```
 
-The named volume holds the database (users, API keys, custom paths, Auto-Sync exclusions), your `.env`, and the `custom.css` a theme is saved to, so keep it if you care about any of those.
+The named volume holds the database (users, API keys, custom paths, Auto-Sync series), your `.env`, and the `custom.css` a theme is saved to, so keep it if you care about any of those.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 

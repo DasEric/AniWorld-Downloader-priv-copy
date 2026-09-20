@@ -375,8 +375,8 @@
             <span data-i18n="settings.enable_autosync">Enable Auto-Sync</span>
           </label>
           <p class="hint" data-i18n="settings.enable_autosync_hint">
-            Checks the newest aniworld.to episodes on a schedule and downloads what is missing for series you already have.
-            Adds an admin-only Auto-Sync tab.
+            Checks only the AniWorld and SerienStream series selected on the Auto-Sync page and downloads missing
+            episodes on the configured schedule.
           </p>
 
           <label class="checkbox">
@@ -384,8 +384,8 @@
             <span data-i18n="settings.autosync_new_only">Auto-Sync: only the new episodes</span>
           </label>
           <p class="hint" data-i18n="settings.autosync_new_only_hint">
-            Queue only the episodes that just came out instead of filling in every episode of the series you are missing.
-            Use this if you leave gaps on purpose.
+            Off fills every existing gap. On includes only episodes or language releases that became available
+            after the series was added.
           </p>
 
           <h3 data-i18n="settings.autosync_schedule">Auto-Sync Schedule</h3>
@@ -665,6 +665,14 @@
                   <td data-i18n="settings.api_sync_status">Last run and its report</td></tr>
                 <tr><td><code>POST /api/autosync/run</code></td><td>full</td>
                   <td data-i18n="settings.api_sync_run">Start a sync right now</td></tr>
+                <tr><td><code>GET /api/autosync/series</code></td><td>full</td>
+                  <td>List the series copies explicitly tracked by Auto-Sync</td></tr>
+                <tr><td><code>POST /api/autosync/series</code></td><td>full</td>
+                  <td>Add a series copy with series_url, language, provider and optional custom_path_id</td></tr>
+                <tr><td><code>PATCH /api/autosync/series/&lt;id&gt;</code></td><td>full</td>
+                  <td>Pause or resume a tracked copy with enabled</td></tr>
+                <tr><td><code>DELETE /api/autosync/series/&lt;id&gt;</code></td><td>full</td>
+                  <td>Remove a series copy from Auto-Sync</td></tr>
                 <tr><td><code>GET /api/settings</code></td><td>full</td>
                   <td data-i18n="settings.api_settings">Read the current settings</td></tr>
               </tbody>

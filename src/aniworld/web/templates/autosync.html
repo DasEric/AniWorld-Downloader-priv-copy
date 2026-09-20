@@ -11,96 +11,73 @@
 
   <section class="card">
     <h2 data-i18n="autosync.how_title">How it works</h2>
-    <ol class="explainer">
-      <li data-i18n="autosync.how_1">
-        On the schedule you set (once a day unless you change it) it pulls the newest episodes list from aniworld.to.
-      </li>
-      <li data-i18n="autosync.how_2">
-        For every new episode it checks whether you already have a folder for that title in your library.
-      </li>
-      <li data-i18n="autosync.how_3">
-        On a match it works out which language your existing files are in, from the language folder if you separate
-        languages, otherwise by reading the audio and subtitle tracks of one file.
-      </li>
-      <li data-i18n="autosync.how_4" id="howFill">
-        If the new episode is out in that language, every episode of the series you are still missing gets queued,
-        into the same folder the rest of the series already lives in.
-      </li>
-      <li data-i18n="autosync.how_4_new_only" id="howNewOnly" hidden>
-        If the new episode is out in that language, it gets queued into the same folder the rest of the series
-        already lives in. Older episodes you are missing are left alone, because "only the new episodes" is on
-        in the settings.
-      </li>
-    </ol>
     <p class="hint" data-i18n="autosync.how_note">
-      There is no list of titles to maintain. Your library is the list, and anything you exclude below is skipped.
-      Only aniworld.to titles are covered, since the newest-episodes list is specific to that site.
+      Auto-Sync checks only the series you add below. Each entry applies to exactly one language and destination;
+      AniWorld and SerienStream are checked directly. It neither scans your complete library nor waits for a
+      “new episodes” page.
     </p>
+    <div class="notice" id="syncModeNotice"></div>
+  </section>
 
-    {# Only worth saying when the setting that solves it is off. #}
-    {% if not lang_separation %}
-    <div class="notice">
-      <span data-i18n="autosync.mixed_languages">
-        Keep one language per folder. Without language separation, Auto-Sync works out a title's language by reading
-        a single file, the first episode it finds, and treats the whole title as that language. If a folder holds
-        episodes in more than one language, the other languages are invisible to it and never get new episodes.
-      </span>
-      <div class="notice-line">
-        <a href="{{ url_for('pages.settings') }}#downloads" data-i18n="autosync.turn_on_separation">
-          Turn on "Separate languages into their own folders" in the settings
-        </a>
-      </div>
+  <section class="card">
+    <h2 data-i18n="autosync.add_title">Add a series</h2>
+    <div class="control-row">
+      <label class="field">
+        <span class="field-label" data-i18n="autosync.source">Source</span>
+        <select id="seriesSite">
+          <option value="aniworld">AniWorld</option>
+          <option value="sto">SerienStream</option>
+        </select>
+      </label>
+      <label class="field">
+        <span class="field-label" data-i18n="autosync.language">Language</span>
+        <select id="seriesLanguage"></select>
+      </label>
+      <label class="field">
+        <span class="field-label" data-i18n="autosync.provider">Hoster</span>
+        <select id="seriesProvider"></select>
+      </label>
+      <label class="field">
+        <span class="field-label" data-i18n="autosync.destination">Destination</span>
+        <select id="seriesPath"><option value="" data-i18n="index.default">Default</option></select>
+      </label>
     </div>
-    {% endif %}
+    <div class="inline-form">
+      <input type="text" id="seriesSearch" placeholder="Search for a series ..." autocomplete="off"
+        data-i18n-placeholder="autosync.search_placeholder" />
+      <button class="btn btn-primary" id="seriesSearchBtn" data-i18n="index.search">Search</button>
+    </div>
+    <p class="hint" data-i18n="autosync.add_hint">
+      Adding records the current state of the selected language. It does not start a download yet.
+    </p>
+    <div id="seriesResults" class="exclude-results"></div>
+  </section>
+
+  <section class="card">
+    <h2 data-i18n="autosync.tracked_title">Tracked series</h2>
+    <table class="data-table stacked-table">
+      <thead>
+        <tr>
+          <th data-i18n="autosync.series">Series</th>
+          <th data-i18n="autosync.source">Source</th>
+          <th data-i18n="autosync.language_destination">Language / destination</th>
+          <th data-i18n="autosync.status_title">Status</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="seriesBody"></tbody>
+    </table>
   </section>
 
   <section class="card">
     <h2 data-i18n="autosync.status_title">Status</h2>
     <div class="sync-stats">
-      <div>
-        <div class="ip-label" data-i18n="autosync.schedule">Schedule</div>
-        <div class="sync-value" id="scheduleValue">-</div>
-      </div>
-      <div>
-        <div class="ip-label" data-i18n="autosync.last_run">Last run</div>
-        <div class="sync-value" id="lastRun">-</div>
-      </div>
-      <div>
-        <div class="ip-label" data-i18n="autosync.next_run">Next run</div>
-        <div class="sync-value" id="nextRun">-</div>
-      </div>
-      <div>
-        <div class="ip-label" data-i18n="autosync.last_result">Last result</div>
-        <div class="sync-value" id="lastResult">-</div>
-      </div>
+      <div><div class="ip-label" data-i18n="autosync.schedule">Schedule</div><div class="sync-value" id="scheduleValue">-</div></div>
+      <div><div class="ip-label" data-i18n="autosync.last_run">Last run</div><div class="sync-value" id="lastRun">-</div></div>
+      <div><div class="ip-label" data-i18n="autosync.next_run">Next run</div><div class="sync-value" id="nextRun">-</div></div>
+      <div><div class="ip-label" data-i18n="autosync.last_result">Last result</div><div class="sync-value" id="lastResult">-</div></div>
     </div>
     <div id="syncReport" class="sync-report"></div>
-  </section>
-
-  <section class="card">
-    <h2 data-i18n="autosync.excluded_title">Excluded titles</h2>
-    <p class="hint" data-i18n="autosync.excluded_hint">
-      Excluded titles are never queued by Auto-Sync, even if you have them in your library. You can also tick
-      "Exclude from Auto-Sync" in the download dialog of any title.
-    </p>
-
-    <div class="inline-form">
-      <input type="text" id="excludeSearch" placeholder="Search a title to exclude..."
-        data-i18n-placeholder="autosync.search_placeholder" />
-      <button class="btn btn-primary" id="excludeSearchBtn" data-i18n="index.search">Search</button>
-    </div>
-    <div id="excludeResults" class="exclude-results"></div>
-
-    <table class="data-table stacked-table">
-      <thead>
-        <tr>
-          <th data-i18n="autosync.title_column">Title</th>
-          <th data-i18n="autosync.url_column">URL</th>
-          <th></th>
-        </tr>
-      </thead>
-      <tbody id="exclusionsBody"></tbody>
-    </table>
   </section>
 </div>
 {% endblock %}

@@ -166,6 +166,26 @@ _SCHEMA = (
     )
     """,
     """
+    CREATE TABLE IF NOT EXISTS autosync_series (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        series_url TEXT NOT NULL,
+        site TEXT NOT NULL CHECK(site IN ('aniworld','sto')),
+        title TEXT NOT NULL,
+        language TEXT NOT NULL,
+        provider TEXT NOT NULL,
+        custom_path_id INTEGER,
+        baseline_episodes TEXT NOT NULL DEFAULT '[]',
+        enabled INTEGER NOT NULL DEFAULT 1,
+        last_checked_at TEXT,
+        last_error TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )
+    """,
+    """
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_autosync_series_copy
+    ON autosync_series (series_url, language, COALESCE(custom_path_id, -1))
+    """,
+    """
     CREATE TABLE IF NOT EXISTS autosync_state (
         key TEXT PRIMARY KEY,
         value TEXT
@@ -803,6 +823,93 @@ def clear_captcha_url(queue_id):
 # ---------------------------------------------------------------------------
 # AutoSync
 # ---------------------------------------------------------------------------
+def get_autosync_series():
+    """Every explicitly tracked series, including a friendly path label."""
+    with session() as conn:
+        return _rows(
+            conn,
+            "SELECT s.*, p.name AS custom_path_name "
+            "FROM autosync_series AS s "
+            "LEFT JOIN custom_paths AS p ON p.id = s.custom_path_id "
+            "ORDER BY s.title COLLATE NOCASE, s.language COLLATE NOCASE, s.id",
+        )
+
+
+def get_autosync_series_item(series_id):
+    with session() as conn:
+        return _row(
+            conn,
+            "SELECT s.*, p.name AS custom_path_name "
+            "FROM autosync_series AS s "
+            "LEFT JOIN custom_paths AS p ON p.id = s.custom_path_id "
+            "WHERE s.id = ?",
+            (series_id,),
+        )
+
+
+def add_autosync_series(
+    *,
+    series_url,
+    site,
+    title,
+    language,
+    provider,
+    custom_path_id=None,
+    baseline_episodes=None,
+):
+    with session() as conn:
+        cur = conn.execute(
+            "INSERT INTO autosync_series "
+            "(series_url, site, title, language, provider, custom_path_id, "
+            " baseline_episodes) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (
+                series_url,
+                site,
+                title,
+                language,
+                provider,
+                custom_path_id,
+                json.dumps(baseline_episodes or []),
+            ),
+        )
+        return cur.lastrowid
+
+
+def update_autosync_series(series_id, **values):
+    allowed = {
+        "language",
+        "provider",
+        "custom_path_id",
+        "baseline_episodes",
+        "enabled",
+        "last_checked_at",
+        "last_error",
+        "title",
+    }
+    fields = []
+    params = []
+    for key, value in values.items():
+        if key not in allowed:
+            raise ValueError(f"Unsupported Auto-Sync field: {key}")
+        fields.append(f"{key} = ?")
+        params.append(json.dumps(value) if key == "baseline_episodes" else value)
+    if not fields:
+        return False
+    params.append(series_id)
+    with session() as conn:
+        cur = conn.execute(
+            f"UPDATE autosync_series SET {', '.join(fields)} WHERE id = ?",
+            params,
+        )
+        return cur.rowcount > 0
+
+
+def remove_autosync_series(series_id):
+    with session() as conn:
+        cur = conn.execute("DELETE FROM autosync_series WHERE id = ?", (series_id,))
+        return cur.rowcount > 0
+
+
 def get_autosync_exclusions():
     with session() as conn:
         return _rows(

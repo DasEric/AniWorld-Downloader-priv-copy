@@ -24,7 +24,7 @@
   const customPathRow = el("customPathRow");
   const customPathSelect = el("customPathSelect");
   const autosyncRow = el("autosyncRow");
-  const autosyncExclude = el("autosyncExclude");
+  const addAutosyncBtn = el("addAutosyncBtn");
   const accordion = el("seasonAccordion");
   const episodeSpinner = el("episodeSpinner");
   const selectAll = el("selectAll");
@@ -503,7 +503,7 @@
       fillProviderSelect(["megakino", "moflix"].includes(currentSite) ? [] : window.STATIC_PROVIDERS);
     }
     loadCustomPaths();
-    loadAutosyncExclusion(url);
+    showAutosyncAction();
 
     try {
       const [series, seasonData] = await Promise.all([
@@ -544,38 +544,26 @@
     }
   }
 
-  // Only meaningful for aniworld titles, that is all Auto-Sync looks at
-  async function loadAutosyncExclusion(url) {
+  function showAutosyncAction() {
     if (!autosyncRow) return;
-    autosyncRow.hidden = true;
-    if (!window.AUTOSYNC_ENABLED || !url.includes("aniworld.to/")) return;
-    try {
-      const data = await apiFetch(
-        `/api/autosync/excluded?url=${encodeURIComponent(url)}`
-      );
-      autosyncExclude.checked = Boolean(data.excluded);
-      autosyncRow.hidden = false;
-    } catch (e) {
-      autosyncRow.hidden = true;
-    }
+    autosyncRow.hidden = !window.AUTOSYNC_ENABLED || !["aniworld", "sto"].includes(currentSite);
   }
 
-  if (autosyncExclude) {
-    autosyncExclude.addEventListener("change", async () => {
+  if (addAutosyncBtn) {
+    addAutosyncBtn.addEventListener("click", async () => {
+      addAutosyncBtn.disabled = true;
       try {
-        await apiSend("/api/autosync/excluded", "POST", {
+        await apiSend("/api/autosync/series", "POST", {
           series_url: seriesUrl,
-          title: seriesTitle,
-          excluded: autosyncExclude.checked
+          language: languageSelect.value,
+          provider: providerSelect.value,
+          custom_path_id: customPathSelect.value ? Number(customPathSelect.value) : null
         });
-        showToast(
-          autosyncExclude.checked
-            ? t("index.autosync_excluded", "Excluded from Auto-Sync")
-            : t("index.autosync_included", "Included in Auto-Sync again")
-        );
+        showToast(t("autosync.added_series", "Series added to Auto-Sync"));
       } catch (error) {
         showToast(error.message);
-        autosyncExclude.checked = !autosyncExclude.checked;
+      } finally {
+        addAutosyncBtn.disabled = false;
       }
     });
   }

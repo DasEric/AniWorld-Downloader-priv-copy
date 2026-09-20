@@ -227,10 +227,11 @@
 
     {% if is_admin %}
     <div class="control-row" id="autosyncRow" hidden>
-      <label class="checkbox" style="margin-top:0">
-        <input type="checkbox" id="autosyncExclude" />
-        <span data-i18n="index.autosync_exclude">Exclude from Auto-Sync</span>
-      </label>
+      <button class="btn btn-secondary" id="addAutosyncBtn" type="button">
+        <i class="fa-solid fa-arrows-rotate" aria-hidden="true"></i>
+        <span data-i18n="index.autosync_add">Add to Auto-Sync</span>
+      </button>
+      <span class="hint" data-i18n="index.autosync_add_hint">Uses the selected language, hoster and destination.</span>
     </div>
     {% endif %}
 

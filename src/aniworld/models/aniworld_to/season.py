@@ -44,6 +44,7 @@ class AniworldSeason:
         self.__season_number = None
         self.__episode_count = None
         self.__episodes = None
+        self.__episode_languages = None
 
         self.__html = None
 
@@ -109,6 +110,13 @@ class AniworldSeason:
             else:
                 self.__episode_count = self.__extract_episode_count()
         return self.__episode_count
+
+    @property
+    def episode_languages(self):
+        """Language badges keyed by episode number, parsed from this page."""
+        if self.__episode_languages is None:
+            self.__episode_languages = self.__extract_episode_languages()
+        return self.__episode_languages
 
     # -----------------------------
     # Extraction helpers
@@ -328,6 +336,34 @@ class AniworldSeason:
             pos += 1
 
         return count
+
+    def __extract_episode_languages(self):
+        """Read the language flags from each episode row without extra requests."""
+        rows = re.findall(
+            r'<tr\b(?=[^>]*itemtype=["\']http://schema\.org/Episode["\'])[^>]*>.*?</tr>',
+            self._html,
+            re.IGNORECASE | re.DOTALL,
+        )
+        flag_labels = {
+            "german.svg": "German Dub",
+            "english.svg": "English Dub",
+            "japanese-german.svg": "German Sub",
+            "japanese-english.svg": "English Sub",
+        }
+        languages = {}
+        for row in rows:
+            match = re.search(r"/(?:episode|film)-(\d+)", row, re.IGNORECASE)
+            if not match:
+                continue
+            filenames = re.findall(r"/public/img/([^/\"']+\.svg)", row, re.IGNORECASE)
+            labels = tuple(
+                flag_labels[name.lower()]
+                for name in filenames
+                if name.lower() in flag_labels
+            )
+            if labels:
+                languages[int(match.group(1))] = labels
+        return languages
 
     def download(self):
         # One failed episode must not abandon the rest of the batch.

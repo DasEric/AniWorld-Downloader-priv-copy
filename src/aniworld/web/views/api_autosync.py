@@ -1,5 +1,6 @@
-"""AutoSync status, exclusions and the manual Sync now trigger."""
+"""AutoSync status, tracked series and the manual Sync now trigger."""
 
+import sqlite3
 import threading
 
 from flask import abort, jsonify, request
@@ -14,6 +15,18 @@ logger = get_logger(__name__)
 def register(bp):
     bp.add_url_rule("/autosync/status", view_func=autosync_status)
     bp.add_url_rule("/autosync/run", view_func=autosync_run, methods=["POST"])
+    bp.add_url_rule("/autosync/series", view_func=list_series)
+    bp.add_url_rule("/autosync/series", view_func=add_series, methods=["POST"])
+    bp.add_url_rule(
+        "/autosync/series/<int:series_id>",
+        view_func=update_series,
+        methods=["PATCH"],
+    )
+    bp.add_url_rule(
+        "/autosync/series/<int:series_id>",
+        view_func=delete_series,
+        methods=["DELETE"],
+    )
     bp.add_url_rule("/autosync/exclusions", view_func=list_exclusions)
     bp.add_url_rule("/autosync/exclusions", view_func=add_exclusion, methods=["POST"])
     bp.add_url_rule(
@@ -21,7 +34,8 @@ def register(bp):
         view_func=delete_exclusion,
         methods=["DELETE"],
     )
-    # Used by the download modal, so it stays available to non-admins
+    # Legacy exclusion endpoints remain readable for compatibility with older
+    # clients and databases. The explicit subscription engine ignores them.
     bp.add_url_rule("/autosync/excluded", view_func=exclusion_state)
     bp.add_url_rule(
         "/autosync/excluded", view_func=set_exclusion_state, methods=["POST"]
@@ -59,6 +73,71 @@ def _run_quietly():
         logger.exception("AutoSync manual run failed")
 
 
+def list_series():
+    _guard()
+    return jsonify({"series": db.get_autosync_series()})
+
+
+def add_series():
+    _guard()
+    data = request.get_json(silent=True) or {}
+    language = data.get("language")
+    if not isinstance(language, str):
+        return jsonify({"error": "language must be a string."}), 400
+    try:
+        item = autosync.add_subscription(
+            series_url=data.get("series_url"),
+            language=language.strip(),
+            provider=data.get("provider"),
+            custom_path_id=data.get("custom_path_id"),
+        )
+    except (sqlite3.IntegrityError, autosync.DuplicateSubscription):
+        return jsonify({"error": "This series copy is already in Auto-Sync."}), 409
+    except (TypeError, ValueError, RuntimeError) as exc:
+        return jsonify({"error": str(exc)}), 400
+    return jsonify({"ok": True, "series": item}), 201
+
+
+def update_series(series_id):
+    _guard()
+    data = request.get_json(silent=True) or {}
+    values = {}
+    if "enabled" in data:
+        if not isinstance(data["enabled"], bool):
+            return jsonify({"error": "enabled must be a boolean."}), 400
+        if data["enabled"]:
+            item = db.get_autosync_series_item(series_id)
+            if not item:
+                return jsonify({"error": "Auto-Sync entry not found."}), 404
+            try:
+                autosync._ensure_copy_is_unique(
+                    item["series_url"],
+                    item["language"],
+                    item.get("custom_path_id"),
+                    current_id=series_id,
+                )
+            except RuntimeError as exc:
+                return jsonify({"error": str(exc)}), 409
+        values["enabled"] = int(data["enabled"])
+    if "provider" in data:
+        try:
+            values["provider"] = autosync._validated_provider(data["provider"])
+        except (TypeError, ValueError) as exc:
+            return jsonify({"error": str(exc)}), 400
+    if not values:
+        return jsonify({"error": "No supported changes supplied."}), 400
+    if not db.update_autosync_series(series_id, **values):
+        return jsonify({"error": "Auto-Sync entry not found."}), 404
+    return jsonify({"ok": True, "series": db.get_autosync_series_item(series_id)})
+
+
+def delete_series(series_id):
+    _guard()
+    if not db.remove_autosync_series(series_id):
+        return jsonify({"error": "Auto-Sync entry not found."}), 404
+    return jsonify({"ok": True})
+
+
 def list_exclusions():
     _guard()
     return jsonify({"exclusions": db.get_autosync_exclusions()})
@@ -81,7 +160,7 @@ def delete_exclusion(exclusion_id):
 
 
 # ---------------------------------------------------------------------------
-# Download modal checkbox
+# Legacy exclusion state
 # ---------------------------------------------------------------------------
 def exclusion_state():
     _guard()
