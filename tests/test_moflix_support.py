@@ -147,6 +147,68 @@ def test_moflix_fallback_uses_the_matching_extractor(monkeypatch):
         _ = episode.provider_url
 
 
+def test_moflix_download_falls_back_after_unreachable_hls(monkeypatch):
+    from aniworld.models.common import common
+
+    _moflix_api(monkeypatch)
+    episode = moflix.MoflixEpisode(
+        "https://moflix-stream.xyz/titles/42", selected_provider="MoflixClick"
+    )
+    calls = []
+
+    def unreachable(url):
+        calls.append(("MoflixClick", url))
+        raise ValueError("MoflixClick has no reachable HLS playlist")
+
+    def usable(url):
+        calls.append(("Gupload", url))
+        return "https://cdn.example/master.m3u8"
+
+    monkeypatch.setitem(
+        moflix.provider_functions, "get_direct_link_from_moflixclick", unreachable
+    )
+    monkeypatch.setitem(
+        moflix.provider_functions, "get_direct_link_from_gupload", usable
+    )
+    monkeypatch.setattr(common.platform, "system", lambda: "Linux")
+    monkeypatch.setattr(
+        common,
+        "check_downloaded",
+        lambda _path: {"exists": True, "audio_langs": {"deu"}, "video_langs": {"und"}},
+    )
+
+    episode.download()
+
+    assert calls == [
+        ("MoflixClick", "https://moflix-stream.click/embed/second"),
+        ("Gupload", "https://gupload.xyz/e/first"),
+    ]
+    assert episode.selected_provider == "Gupload"
+
+
+def test_single_moflix_provider_failure_explains_missing_fallback(monkeypatch):
+    from aniworld.models.common import common
+
+    _moflix_api(monkeypatch)
+    episode = moflix.MoflixEpisode(
+        "https://moflix-stream.xyz/titles/42", selected_provider="MoflixClick"
+    )
+    monkeypatch.setattr(episode, "available_providers", lambda: ("MoflixClick",))
+
+    def unavailable(_url):
+        raise ValueError("no reachable HLS playlist")
+
+    monkeypatch.setitem(
+        moflix.provider_functions,
+        "get_direct_link_from_moflixclick",
+        unavailable,
+    )
+    monkeypatch.setattr(common.platform, "system", lambda: "Linux")
+
+    with pytest.raises(RuntimeError, match="No other supported provider is available"):
+        episode.download()
+
+
 def test_gupload_decodes_player_configuration(monkeypatch):
     key = b"G7#kP!2qZxV9mRwL"
     stream = "https://gupload.xyz/data/e/hls/sample/720p.m3u8"
@@ -211,6 +273,38 @@ def test_moflixclick_tries_the_next_reachable_playlist(monkeypatch):
         == second
     )
     assert requested == ["https://moflix-stream.click/embed/example", first, second]
+
+
+@pytest.mark.parametrize(
+    "player_link,expected",
+    [
+        ("//cdn.example/master.m3u8", "https://cdn.example/master.m3u8"),
+        ("/hls/master.m3u8", "https://moflix-stream.click/hls/master.m3u8"),
+        ("master.m3u8", "https://moflix-stream.click/embed/master.m3u8"),
+    ],
+)
+def test_moflixclick_resolves_relative_playlist_links(
+    monkeypatch, player_link, expected
+):
+    html = (
+        "eval(function(p,a,c,k,e,d){return p}('"
+        f'1 0={{"2":"{player_link}"}};'
+        "',3,3,'links|var|hls4'.split('|')))"
+    )
+    requested = []
+
+    def get(url, **kwargs):
+        requested.append(url)
+        return _response(text=html if url.endswith("/embed/example") else "#EXTM3U\n")
+
+    monkeypatch.setattr(moflixclick.requests, "get", get)
+    assert (
+        moflixclick.get_direct_link_from_moflixclick(
+            "https://moflix-stream.click/embed/example"
+        )
+        == expected
+    )
+    assert requested == ["https://moflix-stream.click/embed/example", expected]
 
 
 def test_moflix_search_excludes_people_and_invalid_ids(monkeypatch):

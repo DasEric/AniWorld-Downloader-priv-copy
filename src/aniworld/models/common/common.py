@@ -364,6 +364,11 @@ def _build_provider_failure_message(action_name, provider_errors):
     details = "; ".join(
         f"{provider}: {error}" for provider, error in provider_errors.items()
     )
+    if len(provider_errors) == 1:
+        return (
+            f"{action_name} failed. No other supported provider is available "
+            f"for this item. {details}"
+        )
     return f"{action_name} failed for all providers. {details}"
 
 

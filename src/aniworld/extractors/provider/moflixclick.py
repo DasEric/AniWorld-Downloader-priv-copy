@@ -2,7 +2,7 @@
 
 import json
 import re
-from urllib.parse import urlparse
+from urllib.parse import urljoin, urlparse
 
 from curl_cffi import requests
 
@@ -44,8 +44,14 @@ def get_direct_link_from_moflixclick(embed_url):
     # in .txt even though its response is an HLS master playlist.
     last_error = None
     for key in ("hls4", "hls3", "hls2"):
-        url = links.get(key)
-        if isinstance(url, str) and urlparse(url).scheme == "https":
+        raw_url = links.get(key)
+        if isinstance(raw_url, str) and raw_url.strip():
+            # The player also emits protocol-relative and path-relative HLS
+            # links. Dropping them made an otherwise working hoster appear to
+            # have no reachable playlist at all.
+            url = urljoin(embed_url, raw_url.strip())
+            if urlparse(url).scheme != "https":
+                continue
             try:
                 playlist = requests.get(
                     url,
