@@ -372,7 +372,7 @@ def test_moflixclick_reports_when_every_mirror_has_dead_segments(monkeypatch):
 
     monkeypatch.setattr(moflixclick.requests, "get", get)
 
-    with pytest.raises(ValueError, match="no playable HLS mirror"):
+    with pytest.raises(ValueError, match=r"hls4: media segment returned HTTP 522"):
         moflixclick.get_direct_links_from_moflixclick(
             "https://moflix-stream.click/embed/example"
         )

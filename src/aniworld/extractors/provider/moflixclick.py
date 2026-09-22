@@ -59,7 +59,13 @@ def _probe_segment(playlist_url, playlist):
         stream=True,
     )
     try:
-        response.raise_for_status()
+        try:
+            response.raise_for_status()
+        except Exception as exc:
+            status = getattr(response, "status_code", None)
+            if status is not None and status >= 400:
+                raise ValueError(f"media segment returned HTTP {status}") from exc
+            raise
         chunk = next((part for part in response.iter_content() if part), b"")
         return bool(chunk) and not chunk.lstrip().lower().startswith(
             (b"<html", b"<!doctype html")
@@ -117,6 +123,7 @@ def get_direct_links_from_moflixclick(embed_url):
     # master is not enough: child playlists may return HTML or empty data.
     last_error = None
     usable = []
+    failures = []
     for key in ("hls4", "hls3", "hls2"):
         raw_url = links.get(key)
         if isinstance(raw_url, str) and raw_url.strip():
@@ -132,11 +139,23 @@ def get_direct_links_from_moflixclick(embed_url):
                         usable.append(url)
                 else:
                     last_error = ValueError(f"{key} has no usable HLS media playlist")
+                    failures.append(f"{key}: invalid playlist or media segment")
             except Exception as exc:
                 last_error = exc
+                status = getattr(getattr(exc, "response", None), "status_code", None)
+                if status is not None and status >= 400:
+                    reason = f"HTTP {status}"
+                elif isinstance(exc, ValueError) and str(exc).startswith(
+                    "media segment returned HTTP "
+                ):
+                    reason = str(exc)
+                else:
+                    reason = type(exc).__name__
+                failures.append(f"{key}: {reason}")
     if usable:
         return tuple(usable)
-    raise ValueError("MoflixClick has no playable HLS mirror") from last_error
+    details = "; ".join(failures) if failures else "no HLS links in the player"
+    raise ValueError(f"MoflixClick has no playable HLS mirror ({details})") from last_error
 
 
 def get_direct_link_from_moflixclick(embed_url):
