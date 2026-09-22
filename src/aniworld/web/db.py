@@ -138,6 +138,7 @@ _SCHEMA = (
         total_episodes INTEGER NOT NULL,
         language TEXT NOT NULL,
         provider TEXT NOT NULL,
+        active_provider TEXT,
         username TEXT,
         status TEXT NOT NULL DEFAULT 'queued'
             CHECK(status IN ('queued','running','completed','failed','cancelled')),
@@ -224,6 +225,7 @@ _MIGRATIONS = {
         "cancel_requested": "INTEGER NOT NULL DEFAULT 0",
         "force_cancelled": "INTEGER NOT NULL DEFAULT 0",
         "started_at": "TEXT",
+        "active_provider": "TEXT",
     },
 }
 
@@ -515,7 +517,8 @@ _STATUS_GROUPS = {
 # item. The list never shows it and it is by far the biggest column, so the page
 # asks for the row without it.
 _QUEUE_SLIM_COLUMNS = (
-    "id, title, series_url, total_episodes, language, provider, username, status, "
+    "id, title, series_url, total_episodes, language, provider, active_provider, "
+    "username, status, "
     "position, current_episode, current_url, errors, custom_path_id, source, "
     "captcha_url, discord_user_id, cancel_requested, force_cancelled, "
     "created_at, started_at, completed_at"
@@ -652,6 +655,15 @@ def update_queue_progress(queue_id, current_episode, current_url):
         )
 
 
+def update_queue_provider(queue_id, provider):
+    """Publish the provider currently serving a running queue item."""
+    with session() as conn:
+        conn.execute(
+            "UPDATE download_queue SET active_provider = ? WHERE id = ?",
+            (provider, queue_id),
+        )
+
+
 def update_queue_errors(queue_id, errors):
     with session() as conn:
         conn.execute(
@@ -735,7 +747,7 @@ def requeue_item(queue_id):
             "UPDATE download_queue SET status = 'queued', errors = '[]', "
             "current_episode = 0, current_url = NULL, started_at = NULL, "
             "completed_at = NULL, cancel_requested = 0, force_cancelled = 0, "
-            "captcha_url = NULL WHERE id = ?",
+            "captcha_url = NULL, active_provider = NULL WHERE id = ?",
             (queue_id,),
         )
     return True

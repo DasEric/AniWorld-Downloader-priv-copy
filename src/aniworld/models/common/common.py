@@ -344,6 +344,22 @@ def _set_selected_provider(self, provider_name):
     raise AttributeError("selected_provider cannot be updated for fallback handling")
 
 
+def _publish_queue_provider(provider_name):
+    """Expose provider fallback changes to the web queue when one is active."""
+    try:
+        from ...playwright.captcha import _local
+
+        queue_id = getattr(_local, "queue_id", None)
+        if queue_id is None:
+            return
+        from ...web.db import update_queue_provider
+
+        update_queue_provider(queue_id, provider_name)
+    except Exception as exc:
+        # CLI downloads and tests do not necessarily initialise the web DB.
+        logger.debug(f"Could not publish active provider {provider_name}: {exc}")
+
+
 def _get_provider_attempt_order(self):
     provider_order = []
     provider_method = getattr(self, "provider_attempt_order", None)
@@ -770,82 +786,127 @@ def _finalize_episode(
         _finalize_resolution_naming(owner)
 
 
-def _download_direct_http(episode_path, stream_url, file_name):
-    """Download a video via direct HTTP (e.g. pixeldrain). Shared helper."""
-    temp_file = episode_path.with_suffix(".temp_dl.mp4")
-    ep_label = file_name or ""
-
+def _download_http_file(
+    output_path,
+    stream_url,
+    *,
+    headers=None,
+    label="",
+    progress_end=100.0,
+    keep_progress=False,
+):
+    """Download one HTTP media file while publishing bytes and network speed."""
+    output_path = Path(output_path)
+    progress_end = max(0.0, min(float(progress_end), 100.0))
+    response = None
+    succeeded = False
     try:
-        logger.debug(f"[DOWNLOADING] {ep_label} via direct download")
         from ...config import DEFAULT_USER_AGENT
 
-        resp = niquests.get(
+        request_headers = {"User-Agent": DEFAULT_USER_AGENT}
+        request_headers.update(headers or {})
+        logger.debug(f"[DOWNLOADING] {label} via direct HTTP")
+        response = niquests.get(
             stream_url,
-            headers={"User-Agent": DEFAULT_USER_AGENT},
+            headers=request_headers,
             stream=True,
             timeout=30,
         )
-        resp.raise_for_status()
+        response.raise_for_status()
 
-        total = int(resp.headers.get("Content-Length", 0))
+        try:
+            total = int(response.headers.get("Content-Length", 0))
+        except (TypeError, ValueError):
+            total = 0
         downloaded = 0
         last_ts = time.monotonic()
         last_bytes = 0
+        last_cancel_check = float("-inf")
 
         with _ffmpeg_progress_lock:
             _ffmpeg_progress.update(
                 percent=0.0, time="", speed="", bandwidth="", active=True
             )
 
-        with open(temp_file, "wb") as f:
-            for chunk in resp.iter_content(chunk_size=1024 * 1024):
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(output_path, "wb") as f:
+            for chunk in response.iter_content(chunk_size=1024 * 1024):
+                if not chunk:
+                    continue
                 f.write(chunk)
                 downloaded += len(chunk)
 
-                if total:
-                    pct = downloaded / total * 100
-                    mb = downloaded / 1024 / 1024
-                    total_mb = total / 1024 / 1024
+                raw_percent = min(downloaded / total * 100, 100.0) if total else 0.0
+                percent = raw_percent * progress_end / 100.0
+                mb = downloaded / 1024 / 1024
+                time_label = (
+                    f"{mb:.1f}/{total / 1024 / 1024:.1f} MB"
+                    if total
+                    else f"{mb:.1f} MB"
+                )
 
-                    now = time.monotonic()
-                    dt = now - last_ts
-                    bw_str = ""
-                    if dt > 0.5:
-                        bw = (downloaded - last_bytes) / dt / 1024 / 1024
-                        bw_str = f"{bw:.1f} MB/s"
-                        last_ts = now
-                        last_bytes = downloaded
+                now = time.monotonic()
+                if now - last_cancel_check >= 0.5:
+                    last_cancel_check = now
+                    try:
+                        from ...playwright.captcha import _local
+                        from ...web.db import is_queue_force_cancelled
 
-                    with _ffmpeg_progress_lock:
-                        prev_bw = _ffmpeg_progress.get("bandwidth", "")
-                        _ffmpeg_progress.update(
-                            percent=round(pct, 1),
-                            time=f"{mb:.1f}/{total_mb:.1f} MB",
-                            speed="",
-                            bandwidth=bw_str or prev_bw,
-                            active=True,
-                        )
+                        queue_id = getattr(_local, "queue_id", None)
+                        if queue_id is not None and is_queue_force_cancelled(queue_id):
+                            raise DownloadCancelled("Download cancelled")
+                    except DownloadCancelled:
+                        raise
+                    except Exception:
+                        pass
+                elapsed = now - last_ts
+                bandwidth = ""
+                if elapsed >= 0.5:
+                    rate = (downloaded - last_bytes) / elapsed / 1024 / 1024
+                    bandwidth = f"{rate:.1f} MB/s"
+                    last_ts = now
+                    last_bytes = downloaded
 
-                    if sys.stderr.isatty():
-                        sys.stderr.write(
-                            f"\r{ep_label} - [{int(pct):3d}%] {mb:.1f}/{total_mb:.1f} MB  "
-                        )
-                        sys.stderr.flush()
+                with _ffmpeg_progress_lock:
+                    previous = _ffmpeg_progress.get("bandwidth", "")
+                    _ffmpeg_progress.update(
+                        percent=round(percent, 1),
+                        time=time_label,
+                        speed="",
+                        bandwidth=bandwidth or previous,
+                        active=True,
+                    )
+
+                if sys.stderr.isatty():
+                    _print_cli_progress(percent, time_label, bandwidth, label)
+
+        succeeded = True
+        if keep_progress:
+            with _ffmpeg_progress_lock:
+                _ffmpeg_progress.update(percent=progress_end, active=True)
 
         if sys.stderr.isatty():
             sys.stderr.write("\r" + " " * 80 + "\r")
             sys.stderr.flush()
-
-        _finalize_episode(temp_file, episode_path, ep_label)
     except Exception:
-        if temp_file.exists():
-            temp_file.unlink()
+        output_path.unlink(missing_ok=True)
         raise
     finally:
-        with _ffmpeg_progress_lock:
-            _ffmpeg_progress.update(
-                percent=0.0, time="", speed="", bandwidth="", active=False
-            )
+        if response is not None:
+            response.close()
+        if not (succeeded and keep_progress):
+            _clear_download_progress()
+
+
+def _download_direct_http(episode_path, stream_url, file_name):
+    """Download a video via direct HTTP (e.g. pixeldrain). Shared helper."""
+    temp_file = episode_path.with_suffix(".temp_dl.mp4")
+    ep_label = file_name or ""
+    try:
+        _download_http_file(temp_file, stream_url, label=ep_label, keep_progress=True)
+        _finalize_episode(temp_file, episode_path, ep_label)
+    finally:
+        _clear_download_progress()
 
 
 def _download_hls_stream(
@@ -1206,13 +1267,41 @@ def _download_full_stream(
     ep_label,
     audio_code,
     parallel_hls=False,
+    direct_http=False,
 ):
     """Fetch audio+video into `temp_full`.
 
-    Suitable HLS streams first use the bounded parallel segment fetcher. Any
-    unsupported playlist falls back to the old manual/FFmpeg path unchanged.
-    Returns True when the parallel path was used.
+    Suitable HLS streams first use the bounded parallel segment fetcher. Signed
+    direct files can be staged over HTTP so the UI gets byte-accurate progress.
+    Returns True when a staged path with reserved finalisation progress was used.
     """
+    if direct_http:
+        direct_source = temp_full.with_suffix(".direct.mp4")
+        try:
+            _download_http_file(
+                direct_source,
+                stream_url,
+                headers=headers,
+                label=ep_label,
+                progress_end=90.0,
+                keep_progress=True,
+            )
+            _run_ffmpeg_with_progress(
+                ffmpeg.input(str(direct_source)).output(
+                    str(temp_full),
+                    vcodec=video_codec,
+                    acodec="copy",
+                    **stream_metadata,
+                ),
+                label=ep_label,
+                progress_start=90.0,
+                progress_end=95.0,
+                keep_progress=True,
+            )
+            return True
+        finally:
+            direct_source.unlink(missing_ok=True)
+
     parallel_remux_failed = False
     if parallel_hls:
         from .hls import cleanup_temp_files
@@ -1313,6 +1402,7 @@ def download(self):
 
     for provider_index, provider_name in enumerate(provider_order):
         _set_selected_provider(self, provider_name)
+        _publish_queue_provider(provider_name)
 
         stream_candidates = None
         if provider_name in STREAM_CANDIDATE_PROVIDERS:
@@ -1435,6 +1525,7 @@ def download(self):
                         ep_label,
                         audio_code,
                         parallel_hls=parallel_hls,
+                        direct_http=provider_name == "Veev",
                     )
 
                     if self._episode_path.exists():

@@ -190,6 +190,24 @@ def test_progress_carries_the_numbers_the_queue_shows(client, queue_item):
     assert progress["active"] is True
 
 
+def test_queue_exposes_provider_fallback(client, queue_item):
+    queue_id = queue_item(provider="MoflixClick")
+    db.update_queue_provider(queue_id, "Veev")
+
+    item = client.get("/api/queue").get_json()["items"][0]
+    assert item["provider"] == "MoflixClick"
+    assert item["active_provider"] == "Veev"
+
+
+def test_retry_clears_previous_provider_fallback(queue_item):
+    queue_id = queue_item(provider="MoflixClick")
+    db.update_queue_provider(queue_id, "Veev")
+    db.set_queue_status(queue_id, "failed")
+
+    assert db.requeue_item(queue_id) is True
+    assert db.get_queue_item(queue_id)["active_provider"] is None
+
+
 def test_an_empty_queue_is_an_empty_list(client):
     assert client.get("/api/queue").get_json()["items"] == []
 

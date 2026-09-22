@@ -408,3 +408,90 @@ def test_failed_parallel_remux_retries_original_playlist(monkeypatch, tmp_path):
     assert used_parallel is False
     assert inputs == [str(segment), playlist]
     assert not segment.exists()
+
+
+def test_direct_http_reports_bytes_speed_and_scaled_progress(monkeypatch, tmp_path):
+    chunk = b"x" * (1024 * 1024)
+
+    class Response:
+        def __init__(self):
+            self.headers = {"Content-Length": str(len(chunk) * 2)}
+            self.closed = False
+
+        def raise_for_status(self):
+            pass
+
+        def iter_content(self, chunk_size):
+            assert chunk_size == 1024 * 1024
+            return iter((chunk, chunk))
+
+        def close(self):
+            self.closed = True
+
+    response = Response()
+    monkeypatch.setattr(common.niquests, "get", lambda *_args, **_kwargs: response)
+    ticks = iter((0.0, 1.0, 2.0))
+    monkeypatch.setattr(common.time, "monotonic", lambda: next(ticks))
+    output = tmp_path / "source.mp4"
+
+    common._download_http_file(
+        output,
+        "https://cdn.example/video.mp4",
+        headers={"Referer": "https://example.com/"},
+        progress_end=90,
+        keep_progress=True,
+    )
+
+    progress = common.get_ffmpeg_progress()
+    assert output.stat().st_size == len(chunk) * 2
+    assert response.closed is True
+    assert progress["percent"] == 90
+    assert progress["time"] == "2.0/2.0 MB"
+    assert progress["bandwidth"] == "1.0 MB/s"
+    assert progress["active"] is True
+
+
+def test_full_stream_stages_direct_http_before_local_remux(monkeypatch, tmp_path):
+    output = tmp_path / "episode.temp_full.mkv"
+    downloads = []
+    remuxes = []
+
+    def download(path, url, **kwargs):
+        path.write_bytes(b"source")
+        downloads.append((path, url, kwargs))
+
+    def remux(node, **kwargs):
+        args = common.ffmpeg.compile(node)
+        remuxes.append((args[args.index("-i") + 1], kwargs))
+
+    monkeypatch.setattr(common, "_download_http_file", download)
+    monkeypatch.setattr(common, "_run_ffmpeg_with_progress", remux)
+
+    staged = common._download_full_stream(
+        "https://edge.veevcdn.co/signed/video",
+        output,
+        {},
+        {"Referer": "https://veev.to/"},
+        {"metadata:s:a:0": "language=deu"},
+        "copy",
+        "Movie",
+        "deu",
+        direct_http=True,
+    )
+
+    source = output.with_suffix(".direct.mp4")
+    assert staged is True
+    assert downloads[0][0] == source
+    assert downloads[0][2]["progress_end"] == 90.0
+    assert remuxes == [
+        (
+            str(source),
+            {
+                "label": "Movie",
+                "progress_start": 90.0,
+                "progress_end": 95.0,
+                "keep_progress": True,
+            },
+        )
+    ]
+    assert not source.exists()

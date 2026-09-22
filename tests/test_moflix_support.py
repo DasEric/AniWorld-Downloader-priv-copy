@@ -442,6 +442,8 @@ def test_moflix_download_uses_other_provider_after_all_hls_mirrors_fail(
     monkeypatch, tmp_path
 ):
     from aniworld.models.common import common
+    from aniworld.playwright import captcha
+    from aniworld.web import db
 
     _moflix_api(monkeypatch)
     episode = moflix.MoflixEpisode(
@@ -477,10 +479,22 @@ def test_moflix_download_uses_other_provider_after_all_hls_mirrors_fail(
     monkeypatch.setattr(common, "_download_full_stream", download_stream)
     monkeypatch.setattr(common, "_finalize_episode", lambda *_args, **_kwargs: None)
 
-    episode.download()
+    queue_id = db.add_to_queue(
+        title="Sample",
+        series_url=episode.url,
+        episodes=[episode.url],
+        language="German Dub",
+        provider="MoflixClick",
+    )
+    captcha._local.queue_id = queue_id
+    try:
+        episode.download()
+    finally:
+        captcha._local.queue_id = None
 
     assert attempted == [*mirrors, gupload_url]
     assert episode.selected_provider == "Gupload"
+    assert db.get_queue_item(queue_id)["active_provider"] == "Gupload"
 
 
 @pytest.mark.parametrize(

@@ -93,13 +93,18 @@
   }
 
   function metaLine(item) {
+    const activeProvider = item.active_provider || item.provider;
+    const provider =
+      activeProvider && activeProvider !== item.provider
+        ? `${item.provider} → ${activeProvider}`
+        : item.provider;
     const counter = t("queue.episode_of", "Episode {current} of {total}", {
       current: Math.min((item.current_episode || 0) + 1, item.total_episodes),
       total: item.total_episodes
     });
     return [
       item.language,
-      item.provider,
+      provider,
       ACTIVE.includes(item.status) ? counter : null,
       durationLabel(item)
     ]
