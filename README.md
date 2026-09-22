@@ -166,14 +166,14 @@ docker compose up -d --build
 
 The comments in [`docker-compose.yaml`](docker-compose.yaml) cover authentication, OIDC, the Discord bot, Auto-Sync, the captcha solver, language, provider, naming, and the other common settings. The complete list, including the options that rarely need touching, is in [`src/aniworld/.env.example`](src/aniworld/.env.example).
 
-Most settings changed in the Web UI apply immediately but are gone after `docker compose down`, because they only live in the running container. The settings page marks those sections with *resets after restart*. Put them in the Compose `environment:` block, or keep a full `.env` on the host and mount it in:
+Settings changed in the Web UI apply immediately and are saved in the persistent config volume, so they remain after a restart or `docker compose down`. Values explicitly saved in the panel take priority over environment and image defaults on the next start. You can still provide initial deployment values through a Compose `environment:` block or a host-side `.env`:
 
 ```yaml
 env_file:
   - ./.env
 ```
 
-The named volume holds the database (users, API keys, custom paths, Auto-Sync series), your `.env`, and the `custom.css` a theme is saved to, so keep it if you care about any of those.
+The named volume holds the database (users, API keys, custom paths, Auto-Sync series), panel settings, your `.env`, and the `custom.css` a theme is saved to, so keep it if you care about any of those.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 

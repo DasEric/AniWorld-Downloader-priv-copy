@@ -43,6 +43,9 @@ def update_settings():
         discord_changed = settings_store.update_settings(data)
     except settings_store.SettingsError as exc:
         return jsonify({"error": str(exc)}), 400
+    except settings_store.SettingsPersistenceError as exc:
+        logger.error("Could not persist panel settings: %s", exc.__cause__ or exc)
+        return jsonify({"error": str(exc)}), 500
 
     if discord_changed:
         _reconcile_discord()
@@ -92,11 +95,7 @@ def path_preview():
 
 
 def export_env():
-    """Hand back the running settings as a .env file to save.
-
-    Most of them live in the environment and reset on a restart, which is the
-    point: this is how someone makes the ones they care about stick.
-    """
+    """Hand back a portable snapshot of the running settings."""
     return Response(
         settings_store.export_env(),
         mimetype="text/plain",

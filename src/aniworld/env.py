@@ -86,13 +86,14 @@ def persist_env_values(env_path: Path, updates: dict):
 
     Only the given keys are touched: existing lines (comments, other keys,
     formatting) are kept as-is, matching keys are rewritten in place, and any
-    missing keys are appended at the end. Used to persist settings that must
-    survive a restart (e.g. the Discord bot config) while every other web-UI
-    setting stays session-only.
+    missing keys are appended at the end. Values are quoted so paths, templates
+    and secrets survive a write/read round trip unchanged.
     """
     env_path = Path(env_path)
     env_path.parent.mkdir(parents=True, exist_ok=True)
-    lines = env_path.read_text().splitlines() if env_path.exists() else []
+    lines = (
+        env_path.read_text(encoding="utf-8").splitlines() if env_path.exists() else []
+    )
 
     remaining = dict(updates)
     out = []
@@ -100,11 +101,18 @@ def persist_env_values(env_path: Path, updates: dict):
         m = ENV_LINE_RE.match(line)
         key = m.group(1).strip() if m else None
         if key is not None and key in remaining:
-            out.append(f"{key}={remaining.pop(key)}")
+            out.append(f"{key}={_quote_env_value(remaining.pop(key))}")
         else:
             out.append(line)
 
     for key, value in remaining.items():
-        out.append(f"{key}={value}")
+        out.append(f"{key}={_quote_env_value(value)}")
 
-    env_path.write_text("\n".join(out) + "\n")
+    env_path.write_text("\n".join(out) + "\n", encoding="utf-8")
+
+
+def _quote_env_value(value):
+    """Encode one value using python-dotenv's single-quoted grammar."""
+    value = str(value)
+    escaped = value.replace("\\", "\\\\").replace("'", "\\'")
+    return f"'{escaped}'"

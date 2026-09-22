@@ -126,11 +126,6 @@
       "library.deleted": "Gelöscht",
 
       "settings.title": "Einstellungen",
-      "settings.persist_notice":
-        "Die meisten Änderungen gelten sofort, werden aber beim Neustart zurückgesetzt. Damit sie bleiben, trage sie in deiner .env-Datei ein unter",
-      "settings.persist_notice_badge":
-        "Nur die unten markierten Bereiche werden zurückgesetzt. Alles andere liegt auf der Festplatte und bleibt von selbst erhalten.",
-      "settings.resets": "wird beim Neustart zurückgesetzt",
       "settings.users": "Benutzerverwaltung",
       "settings.user": "Benutzer",
       "settings.role": "Rolle",
@@ -150,7 +145,7 @@
       "settings.preview_episode": "Episode",
       "settings.preview_movie": "Film",
       "settings.preview_hint":
-        "Wo ein Download landet: der Pfad von oben und die Namensvorlage aus deiner .env zusammengesetzt. Filme nutzen von der Vorlage nur die Dateiendung.",
+        "Wo ein Download landet: der Pfad von oben und die aktuelle Namensvorlage zusammengesetzt. Filme nutzen von der Vorlage nur die Dateiendung.",
       "settings.provider_fallback": "Anbieter-Reihenfolge",
       "settings.provider_fallback_hint":
         "Zieh einen Anbieter, um ihn zu verschieben. Der ausgewählte Anbieter wird immer zuerst versucht. Schlägt er fehl, wird diese Reihenfolge durchlaufen.",
@@ -187,7 +182,7 @@
       "settings.nav.administration": "Verwaltung",
       "settings.export": "Einstellungen exportieren",
       "settings.export_hint":
-        "Die meisten Einstellungen liegen nur im Arbeitsspeicher und fallen beim Neustart auf die Standardwerte zurück. Hier bekommst du eine .env-Datei mit dem, was gerade läuft, fertig zum Speichern unter dem oben genannten Pfad.",
+        "Änderungen im Panel werden automatisch dauerhaft gespeichert. Hier kannst du zusätzlich eine portable .env-Datei der aktuell verwendeten Einstellungen als Sicherung oder für eine separat verwaltete Installation herunterladen.",
       "settings.export_secrets":
         "Passwörter und Tokens bleiben absichtlich draußen: der Discord-Token, das OIDC-Client-Secret und Admin-Passwörter bleiben, wo sie sind.",
       "settings.export_button": ".env herunterladen",

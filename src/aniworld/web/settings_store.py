@@ -1,14 +1,14 @@
 """Reading and writing the web UI settings.
 
-Settings live in environment variables. Most are session-only: they apply to the
-running process and reset on restart unless the user puts them in their .env.
-The Discord bot keys are the exception, a token that vanished on restart would
-be useless, so those are written through to the .env file.
+Settings are exposed through environment variables to the rest of the app. Any
+value saved in the panel is also written to a panel-owned file in the persistent
+config directory and loaded with priority on the next start.
 """
 
 import os
 
 import niquests as requests
+from dotenv import load_dotenv
 
 from ..config import (
     ANIWORLD_CONFIG_DIR,
@@ -21,6 +21,13 @@ from . import paths, schedule
 from .media import SITE_KEYS, SITE_LABELS, SITES_OFF_BY_DEFAULT, WORKING_PROVIDERS
 
 logger = get_logger(__name__)
+
+# Keep panel choices separate from the generated/default .env. The regular
+# .env is deliberately loaded without overriding real process variables, while
+# a choice explicitly saved in the panel must beat image defaults after a
+# restart (notably ANIWORLD_DOWNLOAD_PATH in Docker).
+PANEL_SETTINGS_PATH = ANIWORLD_CONFIG_DIR / ".web-settings.env"
+load_dotenv(PANEL_SETTINGS_PATH, override=True)
 
 UI_LANGUAGES = ("en", "de")
 OUTPUT_FORMATS = ("mkv", "mp4")
@@ -55,6 +62,10 @@ _IP_LOOKUP_URLS = (
 
 class SettingsError(ValueError):
     """Raised for an invalid settings payload."""
+
+
+class SettingsPersistenceError(RuntimeError):
+    """Raised when a valid panel change could not be stored durably."""
 
 
 def _flag(key, default="0"):
@@ -348,16 +359,17 @@ def _collect_discord(payload, updates):
             updates[DISCORD_KEYS[field]] = value
 
 
-def _persist_discord(updates):
-    subset = {k: v for k, v in updates.items() if k in set(DISCORD_KEYS.values())}
-    if not subset:
+def _persist_settings(updates):
+    if not updates:
         return
     try:
         from ..env import persist_env_values
 
-        persist_env_values(ANIWORLD_CONFIG_DIR / ".env", subset)
+        persist_env_values(PANEL_SETTINGS_PATH, updates)
     except OSError as exc:
-        logger.warning("Could not persist Discord settings to .env: %s", exc)
+        raise SettingsPersistenceError(
+            "The settings could not be written to the persistent config directory"
+        ) from exc
 
 
 # ---------------------------------------------------------------------------
@@ -510,11 +522,11 @@ def update_settings(data):
     if discord_changed:
         _collect_discord(data["discord"], updates)
 
+    # Persist first. If the disk is read-only/full, the API must not claim a
+    # successful save or leave a runtime-only change that vanishes on restart.
+    _persist_settings(updates)
     for key, value in updates.items():
         os.environ[key] = value
-
-    if discord_changed:
-        _persist_discord(updates)
 
     return discord_changed
 
@@ -522,13 +534,12 @@ def update_settings(data):
 # ---------------------------------------------------------------------------
 # Exporting what is running
 #
-# Most settings live in the environment and go back to their defaults on a
-# restart, which is deliberate. This writes out what the instance is using
-# right now as a .env, so anyone who wants a setting to stick can save it.
+# Panel changes already persist. This snapshot is still useful as a backup or
+# as a starting point for a separately managed deployment configuration.
 #
-# Secrets are left out on purpose. The Discord token is already written to the
-# .env by the bot settings themselves, and nothing else here should end up in
-# a file that lands in a downloads folder.
+# Secrets are left out on purpose. The Discord token is already kept in the
+# panel-owned settings file, and nothing sensitive should end up in an export
+# that may be copied into a downloads folder.
 # ---------------------------------------------------------------------------
 def _env_sections():
     """(heading, [(key, value)]) in the order they should be written."""
@@ -579,7 +590,7 @@ def _env_sections():
             ],
         ),
         (
-            "Discord bot (the token is not exported, it is already in your .env)",
+            "Discord bot (the token is not included in this export)",
             [
                 (DISCORD_KEYS["enabled"], _one_or_zero(discord["enabled"])),
                 (DISCORD_KEYS["owner_id"], discord["owner_id"]),
@@ -610,9 +621,9 @@ def export_env():
     lines = [
         "# AniWorld Downloader settings, exported from the web UI.",
         "#",
-        "# These are the values this instance is running with right now. Save the",
-        "# file as your .env, or copy the lines you want into the one you have, and",
-        "# they will be there again after a restart.",
+        "# These are the values this instance is running with right now. Panel",
+        "# changes are already stored persistently; this file is a portable backup",
+        "# or a starting point for a separately managed deployment configuration.",
         "#",
         "# Passwords and tokens are deliberately not in here: the Discord bot token,",
         "# the OIDC client secret and any admin password stay where they are.",

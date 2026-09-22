@@ -500,21 +500,55 @@ def test_discord_must_be_an_object():
         update_settings({"discord": "yes please"})
 
 
-def test_discord_settings_are_written_to_the_env_file():
-    """A token that vanished on restart would be useless."""
-    from aniworld.config import ANIWORLD_CONFIG_DIR
+def test_all_panel_settings_are_written_to_the_persistent_file(monkeypatch, tmp_path):
+    from dotenv import dotenv_values
 
-    update_settings({"discord": {"token": "persisted-token", "enabled": True}})
-    written = (ANIWORLD_CONFIG_DIR / ".env").read_text(encoding="utf-8")
-    assert "persisted-token" in written
+    stored = tmp_path / ".web-settings.env"
+    monkeypatch.setattr(settings_store, "PANEL_SETTINGS_PATH", stored)
+
+    update_settings(
+        {
+            "enable_htv": True,
+            "ui_language": "de",
+            "output_format": "mp4",
+            "discord": {"token": "persisted token #1", "enabled": True},
+        }
+    )
+    values = dotenv_values(stored)
+
+    assert values["ANIWORLD_ENABLE_HTV"] == "1"
+    assert values["ANIWORLD_UI_LANGUAGE"] == "de"
+    assert values["ANIWORLD_NAMING_TEMPLATE"].endswith(".mp4")
+    assert values["ANIWORLD_DISCORD_BOT_ENABLED"] == "1"
+    assert values["ANIWORLD_DISCORD_TOKEN"] == "persisted token #1"
 
 
-def test_other_settings_are_not_written_to_the_env_file():
-    from aniworld.config import ANIWORLD_CONFIG_DIR
+def test_output_format_is_restored_from_disk_after_a_restart(monkeypatch, tmp_path):
+    from dotenv import load_dotenv
 
-    update_settings({"enable_htv": True, "ui_language": "de"})
-    written = (ANIWORLD_CONFIG_DIR / ".env").read_text(encoding="utf-8")
-    assert "ANIWORLD_ENABLE_HTV=1" not in written
+    stored = tmp_path / ".web-settings.env"
+    monkeypatch.setattr(settings_store, "PANEL_SETTINGS_PATH", stored)
+    update_settings({"output_format": "mp4"})
+
+    # A fresh process starts with its deployment/image environment, then the
+    # panel-owned file is loaded with priority.
+    monkeypatch.setenv("ANIWORLD_NAMING_TEMPLATE", "{title}.mkv")
+    load_dotenv(stored, override=True)
+
+    assert settings_store.output_format() == "mp4"
+
+
+def test_a_persistence_failure_does_not_apply_a_runtime_only_change(monkeypatch):
+    from aniworld import env
+
+    def fail(*_args, **_kwargs):
+        raise OSError("read-only filesystem")
+
+    monkeypatch.setattr(env, "persist_env_values", fail)
+    with pytest.raises(settings_store.SettingsPersistenceError):
+        update_settings({"ui_language": "de"})
+
+    assert settings_store.ui_language() == "en"
 
 
 # ---------------------------------------------------------------------------

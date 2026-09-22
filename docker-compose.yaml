@@ -17,10 +17,9 @@ services:
     # NOTE: Create ./Downloads before running: mkdir -p Downloads
     # Docker creates missing bind-mount directories as root, causing permission errors.
 
-    # Most settings changed in the Web UI apply immediately but are gone on the
-    # next restart, because they only live in the running process. The sections
-    # marked "resets after restart" on the settings page are the ones affected.
-    # Set them here (or in an env_file) to make them stick.
+    # Settings changed in the Web UI apply immediately and are stored in this
+    # service's persistent config volume. They survive restarts and container
+    # recreation as long as the aniworld-data volume is kept.
     #
     # Alternatively, keep a full .env on the host and mount it in:
     # env_file:
@@ -77,9 +76,8 @@ services:
     #   ANIWORLD_WEB_BASE_URL: "https://aniworld.example.com"  # External URL for redirects
 
     # --- Discord request bot (uncomment the environment block to enable) ---
-    # Unlike the settings above, the bot's fields are written through to the .env
-    # in the config volume when you save them in the Web UI, so setting them here
-    # is optional.
+    # Like the other panel settings, bot fields are stored in the config volume
+    # when saved in the Web UI, so setting them here is optional.
     #   ANIWORLD_DISCORD_BOT_ENABLED: "1"             # Let users request titles from Discord
     #   ANIWORLD_DISCORD_TOKEN: ""                    # Bot token from the Discord developer portal
     #   ANIWORLD_DISCORD_OWNER_ID: ""                 # Your user ID, requests are sent here for approval

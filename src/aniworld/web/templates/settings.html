@@ -6,17 +6,6 @@
 <div class="container container-settings">
   <h1 data-i18n="settings.title">Settings</h1>
 
-  <div class="notice">
-    <span data-i18n="settings.persist_notice">
-      Most changes here apply right away but reset when AniWorld Downloader restarts. To keep those, set them in your
-      .env file at
-    </span>
-    <code>{{ env_path }}</code>
-    <div class="notice-line" data-i18n="settings.persist_notice_badge">
-      Only the sections marked below reset. Everything else is stored on disk and comes back on its own.
-    </div>
-  </div>
-
   <div class="settings-layout">
     <nav class="settings-nav" id="settingsNav" role="tablist" aria-orientation="vertical"
       aria-label="Settings sections">
@@ -74,10 +63,7 @@
       <section class="settings-pane" id="pane-downloads" role="tabpanel"
         aria-labelledby="tab-downloads" tabindex="-1">
         <section class="card">
-          <div class="card-head">
-            <h2 data-i18n="settings.downloads">Downloads</h2>
-            <span class="reset-badge" data-i18n="settings.resets">resets after restart</span>
-          </div>
+          <h2 data-i18n="settings.downloads">Downloads</h2>
           <h3 data-i18n="settings.download_path">Download Path</h3>
           <div class="inline-form">
             <input type="text" id="downloadPath" placeholder="/path/to/downloads" />
@@ -97,7 +83,7 @@
           </div>
           <p class="hint schedule-summary invalid" id="pathPreviewError" hidden></p>
           <p class="hint" data-i18n="settings.preview_hint">
-            Where a download ends up, the path above and the naming template from your .env put together.
+            Where a download ends up, the path above and the current naming template put together.
             Movies do not use the template beyond its file extension.
           </p>
 
@@ -150,10 +136,7 @@
       <section class="settings-pane" id="pane-library" role="tabpanel"
         aria-labelledby="tab-library" tabindex="-1" hidden>
         <section class="card">
-          <div class="card-head">
-            <h2 data-i18n="settings.library">Library</h2>
-            <span class="reset-badge" data-i18n="settings.resets">resets after restart</span>
-          </div>
+          <h2 data-i18n="settings.library">Library</h2>
           <label class="checkbox">
             <input type="checkbox" id="enableLibrary" data-setting="enable_library" data-reload="1" />
             <span data-i18n="settings.enable_library">Enable Library</span>
@@ -193,10 +176,7 @@
       <section class="settings-pane" id="pane-sites" role="tabpanel"
         aria-labelledby="tab-sites" tabindex="-1" hidden>
         <section class="card">
-          <div class="card-head">
-            <h2 data-i18n="settings.sites">Sites</h2>
-            <span class="reset-badge" data-i18n="settings.resets">resets after restart</span>
-          </div>
+          <h2 data-i18n="settings.sites">Sites</h2>
           <p class="hint" data-i18n="settings.sites_hint">
             Every site you switch off loses its tab on the home page, along with the rows it fills
             there. Nothing you have already downloaded is touched.
@@ -366,10 +346,7 @@
       <section class="settings-pane" id="pane-autosync" role="tabpanel"
         aria-labelledby="tab-autosync" tabindex="-1" hidden>
         <section class="card">
-          <div class="card-head">
-            <h2 data-i18n="settings.autosync">Auto-Sync</h2>
-            <span class="reset-badge" data-i18n="settings.resets">resets after restart</span>
-          </div>
+          <h2 data-i18n="settings.autosync">Auto-Sync</h2>
           <label class="checkbox">
             <input type="checkbox" id="enableAutosync" data-setting="enable_autosync" data-reload="1" />
             <span data-i18n="settings.enable_autosync">Enable Auto-Sync</span>
@@ -450,10 +427,7 @@
       <section class="settings-pane" id="pane-appearance" role="tabpanel"
         aria-labelledby="tab-appearance" tabindex="-1" hidden>
         <section class="card">
-          <div class="card-head">
-            <h2 data-i18n="settings.language">Language</h2>
-            <span class="reset-badge" data-i18n="settings.resets">resets after restart</span>
-          </div>
+          <h2 data-i18n="settings.language">Language</h2>
           <div class="control-row">
             <label class="field field-compact">
               <span class="field-label" data-i18n="settings.ui_language">Interface Language</span>
@@ -780,9 +754,8 @@
         <section class="card">
           <h2 data-i18n="settings.export">Export settings</h2>
           <p class="hint" data-i18n="settings.export_hint">
-            Most settings live in memory and go back to their defaults when AniWorld Downloader restarts.
-            This hands you a .env file holding what the instance is running right now, ready to save at the
-            path above so it comes back on its own.
+            Panel changes are saved automatically. This downloads a portable .env snapshot of the settings
+            currently in use, for backup or a separately managed deployment.
           </p>
           <p class="hint" data-i18n="settings.export_secrets">
             Passwords and tokens are left out on purpose: the Discord bot token, the OIDC client secret and

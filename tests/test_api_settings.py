@@ -19,6 +19,17 @@ def test_a_setting_can_be_changed(client):
     assert settings_store.ui_language() == "de"
 
 
+def test_a_persistence_failure_is_reported_as_a_server_error(client, monkeypatch):
+    def fail(_data):
+        raise settings_store.SettingsPersistenceError("settings were not saved")
+
+    monkeypatch.setattr(settings_store, "update_settings", fail)
+    response = client.put("/api/settings", json={"ui_language": "de"})
+
+    assert response.status_code == 500
+    assert response.get_json()["error"] == "settings were not saved"
+
+
 def test_the_change_shows_up_on_the_next_read(client):
     client.put("/api/settings", json={"enable_htv": True})
     assert client.get("/api/settings").get_json()["enable_htv"] is True
@@ -400,10 +411,7 @@ def test_ping_reports_a_signed_in_user(auth_client):
 
 
 # ---------------------------------------------------------------------------
-# Exporting the running settings
-#
-# Settings live in the environment and reset on a restart on purpose. This is
-# the way out for anyone who wants one to stick.
+# Exporting the running settings as a portable backup
 # ---------------------------------------------------------------------------
 def test_the_settings_can_be_downloaded_as_an_env_file(client):
     response = client.get("/api/settings/env")
@@ -411,6 +419,13 @@ def test_the_settings_can_be_downloaded_as_an_env_file(client):
     assert "attachment" in response.headers["Content-Disposition"]
     assert "aniworld.env" in response.headers["Content-Disposition"]
     assert response.mimetype == "text/plain"
+
+
+def test_the_settings_page_no_longer_warns_about_restart_resets(client):
+    body = client.get("/settings").get_data(as_text=True)
+    assert "settings.persist_notice" not in body
+    assert "reset-badge" not in body
+    assert "reset when AniWorld Downloader restarts" not in body
 
 
 def test_the_export_holds_what_is_running(client):

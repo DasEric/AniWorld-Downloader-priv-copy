@@ -1,6 +1,5 @@
 """HTML pages."""
 
-import platform
 from pathlib import Path
 
 from flask import (
@@ -12,7 +11,7 @@ from flask import (
     send_from_directory,
 )
 
-from ...config import ANIWORLD_CONFIG_DIR, LANG_LABELS
+from ...config import LANG_LABELS
 from .. import paths, settings_store, theming
 from ..media import WORKING_PROVIDERS
 
@@ -94,15 +93,4 @@ def autosync():
 
 @bp.route("/settings")
 def settings():
-    return render_template("settings.html", env_path=_display_env_path())
-
-
-def _display_env_path():
-    """Show the .env location, shortened to ~/ where that makes sense."""
-    env_path = ANIWORLD_CONFIG_DIR / ".env"
-    if platform.system() == "Windows":
-        return str(env_path)
-    try:
-        return f"~/{env_path.relative_to(Path.home())}"
-    except ValueError:
-        return str(env_path)
+    return render_template("settings.html")
