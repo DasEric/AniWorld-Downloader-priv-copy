@@ -417,6 +417,16 @@ class MoflixEpisode:
             )
         return stream_url
 
+    def stream_url_candidates(self):
+        """Expose the player's HLS mirrors for download-time failover."""
+        if self.selected_provider != "MoflixClick":
+            return (self.stream_url,)
+        from ...extractors.provider.moflixclick import (
+            get_direct_links_from_moflixclick,
+        )
+
+        return get_direct_links_from_moflixclick(self.provider_url)
+
     @property
     def _separate_audio_rendition(self):
         # Moflix HLS masters can default to English while carrying German as

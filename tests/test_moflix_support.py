@@ -12,13 +12,19 @@ from aniworld.models.moflix_stream import series as moflix
 from aniworld.search import fetch_moflix_movies, query_moflix
 
 
-def _response(*, payload=None, text=""):
+def _response(*, payload=None, text="", status_code=200):
+    def raise_for_status():
+        if status_code >= 400:
+            raise RuntimeError(f"HTTP {status_code}")
+
     return SimpleNamespace(
-        status_code=200,
+        status_code=status_code,
         cookies={},
         text=text,
         json=lambda: payload,
-        raise_for_status=lambda: None,
+        raise_for_status=raise_for_status,
+        iter_content=lambda chunk_size=512: iter((b"media bytes",)),
+        close=lambda: None,
     )
 
 
@@ -164,9 +170,7 @@ def test_moflix_download_falls_back_after_unreachable_hls(monkeypatch):
         calls.append(("Gupload", url))
         return "https://cdn.example/master.m3u8"
 
-    monkeypatch.setitem(
-        moflix.provider_functions, "get_direct_link_from_moflixclick", unreachable
-    )
+    monkeypatch.setattr(moflixclick, "get_direct_links_from_moflixclick", unreachable)
     monkeypatch.setitem(
         moflix.provider_functions, "get_direct_link_from_gupload", usable
     )
@@ -198,11 +202,7 @@ def test_single_moflix_provider_failure_explains_missing_fallback(monkeypatch):
     def unavailable(_url):
         raise ValueError("no reachable HLS playlist")
 
-    monkeypatch.setitem(
-        moflix.provider_functions,
-        "get_direct_link_from_moflixclick",
-        unavailable,
-    )
+    monkeypatch.setattr(moflixclick, "get_direct_links_from_moflixclick", unavailable)
     monkeypatch.setattr(common.platform, "system", lambda: "Linux")
 
     with pytest.raises(RuntimeError, match="No other supported provider is available"):
@@ -236,7 +236,13 @@ def test_moflixclick_unpacks_hls_links(monkeypatch):
     )
 
     def get(url, **kwargs):
-        return _response(text=html if "moflix-stream.click" in url else "#EXTM3U\n")
+        return _response(
+            text=(
+                html
+                if url.endswith("/embed/sample")
+                else "#EXTM3U\n#EXTINF:5,\nsegment.ts\n#EXT-X-ENDLIST\n"
+            )
+        )
 
     monkeypatch.setattr(moflixclick.requests, "get", get)
     assert (
@@ -263,7 +269,9 @@ def test_moflixclick_tries_the_next_reachable_playlist(monkeypatch):
             return _response(text=html)
         if url == first:
             raise TimeoutError("playlist timed out")
-        return _response(text="#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1\nvideo.m3u8")
+        if url == second:
+            return _response(text="#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1\nvideo.m3u8")
+        return _response(text="#EXTM3U\n#EXTINF:5,\nsegment.ts\n#EXT-X-ENDLIST\n")
 
     monkeypatch.setattr(moflixclick.requests, "get", get)
     assert (
@@ -272,7 +280,206 @@ def test_moflixclick_tries_the_next_reachable_playlist(monkeypatch):
         )
         == second
     )
-    assert requested == ["https://moflix-stream.click/embed/example", first, second]
+    assert requested == [
+        "https://moflix-stream.click/embed/example",
+        first,
+        second,
+        "https://cdn.example/video.m3u8",
+        "https://cdn.example/segment.ts",
+    ]
+
+
+@pytest.mark.parametrize("broken_child", ["video", "audio"])
+def test_moflixclick_skips_master_with_invalid_child_playlist(
+    monkeypatch, broken_child
+):
+    first = "https://cdn.example/first/master.m3u8"
+    second = "https://cdn.example/second/master.txt"
+    html = (
+        "eval(function(p,a,c,k,e,d){return p}('"
+        f'1 0={{"2":"{first}","3":"{second}"}};'
+        "',4,4,'links|var|hls4|hls3'.split('|')))"
+    )
+    master = (
+        '#EXTM3U\n#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="dub",LANGUAGE="de",'
+        'URI="audio.m3u8"\n#EXT-X-STREAM-INF:BANDWIDTH=100,AUDIO="dub"\n'
+        "video.m3u8\n"
+    )
+    media = "#EXTM3U\n#EXTINF:5,\nsegment.ts\n#EXT-X-ENDLIST\n"
+    requested = []
+
+    def get(url, **_kwargs):
+        requested.append(url)
+        if url.endswith("/embed/example"):
+            return _response(text=html)
+        if url in (first, second):
+            return _response(text=master)
+        if url == f"https://cdn.example/first/{broken_child}.m3u8":
+            return _response(text="<html>expired or denied</html>")
+        return _response(text=media)
+
+    monkeypatch.setattr(moflixclick.requests, "get", get)
+
+    assert moflixclick.get_direct_links_from_moflixclick(
+        "https://moflix-stream.click/embed/example"
+    ) == (second,)
+    assert f"https://cdn.example/first/{broken_child}.m3u8" in requested
+
+
+def test_moflixclick_skips_master_with_unreachable_first_segment(monkeypatch):
+    first = "https://cdn.example/first/master.m3u8"
+    second = "https://cdn.example/second/master.m3u8"
+    html = (
+        "eval(function(p,a,c,k,e,d){return p}('"
+        f'1 0={{"2":"{first}","3":"{second}"}};'
+        "',4,4,'links|var|hls4|hls3'.split('|')))"
+    )
+    media = "#EXTM3U\n#EXTINF:5,\nsegment.ts\n#EXT-X-ENDLIST\n"
+    requested = []
+
+    def get(url, **_kwargs):
+        requested.append(url)
+        if url.endswith("/embed/example"):
+            return _response(text=html)
+        if url in (first, second):
+            return _response(text=media)
+        if url == "https://cdn.example/first/segment.ts":
+            return _response(status_code=522)
+        return _response()
+
+    monkeypatch.setattr(moflixclick.requests, "get", get)
+
+    assert moflixclick.get_direct_links_from_moflixclick(
+        "https://moflix-stream.click/embed/example"
+    ) == (second,)
+    assert "https://cdn.example/first/segment.ts" in requested
+
+
+def test_moflixclick_reports_when_every_mirror_has_dead_segments(monkeypatch):
+    stream = "https://cdn.example/master.m3u8"
+    html = (
+        "eval(function(p,a,c,k,e,d){return p}('"
+        f'1 0={{"2":"{stream}"}};'
+        "',3,3,'links|var|hls4'.split('|')))"
+    )
+
+    def get(url, **_kwargs):
+        if url.endswith("/embed/example"):
+            return _response(text=html)
+        if url == stream:
+            return _response(text="#EXTM3U\n#EXTINF:5,\nsegment.ts\n")
+        return _response(status_code=522)
+
+    monkeypatch.setattr(moflixclick.requests, "get", get)
+
+    with pytest.raises(ValueError, match="no playable HLS mirror"):
+        moflixclick.get_direct_links_from_moflixclick(
+            "https://moflix-stream.click/embed/example"
+        )
+
+
+def test_moflixclick_returns_all_usable_player_mirrors(monkeypatch):
+    first = "https://cdn.example/first.m3u8"
+    second = "https://cdn.example/second.m3u8"
+    html = (
+        "eval(function(p,a,c,k,e,d){return p}('"
+        f'1 0={{"2":"{first}","3":"{second}"}};'
+        "',4,4,'links|var|hls4|hls3'.split('|')))"
+    )
+    media = "#EXTM3U\n#EXTINF:5,\nsegment.ts\n#EXT-X-ENDLIST\n"
+    monkeypatch.setattr(
+        moflixclick.requests,
+        "get",
+        lambda url, **_kwargs: _response(
+            text=html if url.endswith("/embed/example") else media
+        ),
+    )
+
+    assert moflixclick.get_direct_links_from_moflixclick(
+        "https://moflix-stream.click/embed/example"
+    ) == (first, second)
+
+
+def test_moflix_download_tries_next_hls_mirror_after_runtime_failure(
+    monkeypatch, tmp_path
+):
+    from aniworld.models.common import common
+
+    _moflix_api(monkeypatch)
+    episode = moflix.MoflixEpisode(
+        "https://moflix-stream.xyz/titles/42", selected_provider="MoflixClick"
+    )
+    episode.selected_path = str(tmp_path)
+    first = "https://cdn.example/first.m3u8"
+    second = "https://cdn.example/second.m3u8"
+    monkeypatch.setattr(episode, "stream_url_candidates", lambda: (first, second))
+    monkeypatch.setattr(common.platform, "system", lambda: "Linux")
+    monkeypatch.setattr(
+        common,
+        "check_downloaded",
+        lambda _path: {"exists": False, "audio_langs": set(), "video_langs": set()},
+    )
+    attempted = []
+
+    def download_stream(url, output, *_args, **_kwargs):
+        attempted.append(url)
+        if url == first:
+            raise RuntimeError("child playlist became invalid")
+        output.write_bytes(b"downloaded")
+        return False
+
+    monkeypatch.setattr(common, "_download_full_stream", download_stream)
+    monkeypatch.setattr(common, "_finalize_episode", lambda *_args, **_kwargs: None)
+
+    episode.download()
+
+    assert attempted == [first, second]
+    assert episode.selected_provider == "MoflixClick"
+
+
+def test_moflix_download_uses_other_provider_after_all_hls_mirrors_fail(
+    monkeypatch, tmp_path
+):
+    from aniworld.models.common import common
+
+    _moflix_api(monkeypatch)
+    episode = moflix.MoflixEpisode(
+        "https://moflix-stream.xyz/titles/42", selected_provider="MoflixClick"
+    )
+    episode.selected_path = str(tmp_path)
+    mirrors = (
+        "https://cdn.example/first.m3u8",
+        "https://cdn.example/second.m3u8",
+    )
+    gupload_url = "https://cdn.example/gupload.m3u8"
+    monkeypatch.setattr(episode, "stream_url_candidates", lambda: mirrors)
+    monkeypatch.setitem(
+        moflix.provider_functions,
+        "get_direct_link_from_gupload",
+        lambda _url: gupload_url,
+    )
+    monkeypatch.setattr(common.platform, "system", lambda: "Linux")
+    monkeypatch.setattr(
+        common,
+        "check_downloaded",
+        lambda _path: {"exists": False, "audio_langs": set(), "video_langs": set()},
+    )
+    attempted = []
+
+    def download_stream(url, output, *_args, **_kwargs):
+        attempted.append(url)
+        if url in mirrors:
+            raise RuntimeError("media segment unavailable")
+        output.write_bytes(b"downloaded")
+        return False
+
+    monkeypatch.setattr(common, "_download_full_stream", download_stream)
+    monkeypatch.setattr(common, "_finalize_episode", lambda *_args, **_kwargs: None)
+
+    episode.download()
+
+    assert attempted == [*mirrors, gupload_url]
+    assert episode.selected_provider == "Gupload"
 
 
 @pytest.mark.parametrize(
@@ -295,7 +502,13 @@ def test_moflixclick_resolves_relative_playlist_links(
 
     def get(url, **kwargs):
         requested.append(url)
-        return _response(text=html if url.endswith("/embed/example") else "#EXTM3U\n")
+        return _response(
+            text=(
+                html
+                if url.endswith("/embed/example")
+                else "#EXTM3U\n#EXTINF:5,\nsegment.ts\n#EXT-X-ENDLIST\n"
+            )
+        )
 
     monkeypatch.setattr(moflixclick.requests, "get", get)
     assert (
@@ -304,7 +517,11 @@ def test_moflixclick_resolves_relative_playlist_links(
         )
         == expected
     )
-    assert requested == ["https://moflix-stream.click/embed/example", expected]
+    assert requested == [
+        "https://moflix-stream.click/embed/example",
+        expected,
+        expected.rsplit("/", 1)[0] + "/segment.ts",
+    ]
 
 
 def test_moflix_search_excludes_people_and_invalid_ids(monkeypatch):

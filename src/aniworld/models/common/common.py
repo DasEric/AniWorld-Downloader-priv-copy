@@ -51,8 +51,8 @@ except ImportError:
 # Precompile regex for forbidden filename characters
 FORBIDDEN_CHARS = re.compile(r'[<>:"/\\|?*]')
 
-# Providers that already exhaust their own mirrors in one extractor call.
-SINGLE_ATTEMPT_PROVIDERS = frozenset({"MoflixClick"})
+# Providers whose extractor exposes all HLS mirrors for download-time failover.
+STREAM_CANDIDATE_PROVIDERS = frozenset({"MoflixClick"})
 
 
 def clean_title(title: str) -> str:
@@ -1314,16 +1314,35 @@ def download(self):
     for provider_index, provider_name in enumerate(provider_order):
         _set_selected_provider(self, provider_name)
 
-        # MoflixClick's extractor already checks each advertised HLS mirror.
-        # Repeating a failed full download three times can leave its queue item
-        # at 0% for minutes before trying another provider or reporting failure.
+        stream_candidates = None
+        if provider_name in STREAM_CANDIDATE_PROVIDERS:
+            candidates_method = getattr(self, "stream_url_candidates", None)
+            if callable(candidates_method):
+                try:
+                    stream_candidates = tuple(candidates_method())
+                    if not stream_candidates:
+                        raise ValueError("No usable HLS mirrors")
+                except Exception as exc:
+                    provider_errors[provider_name] = exc
+                    logger.warning(
+                        f"Could not resolve HLS mirrors for {provider_name}: {exc}"
+                    )
+                    continue
+        # Do not retry the same failed Moflix URL. Try the next player mirror
+        # instead, then the next supported provider if one exists.
         provider_retries = (
-            1 if provider_name in SINGLE_ATTEMPT_PROVIDERS else max_retries
+            len(stream_candidates)
+            if stream_candidates is not None
+            else (1 if provider_name in STREAM_CANDIDATE_PROVIDERS else max_retries)
         )
         for attempt in range(1, provider_retries + 1):
             try:
                 _reset_provider_resolution_cache(self)
-                stream_url = self.stream_url
+                stream_url = (
+                    stream_candidates[attempt - 1]
+                    if stream_candidates is not None
+                    else self.stream_url
+                )
                 headers = PROVIDER_HEADERS_D.get(provider_name, {})
                 check = check_downloaded(self._episode_path)
                 input_kwargs = {

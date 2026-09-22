@@ -6,6 +6,7 @@ from urllib.parse import urljoin, urlparse
 
 from curl_cffi import requests
 
+from ...models.common.hls import _parse_master_playlist, _select_audio_rendition
 from .filemoon import _unpack_js
 
 _PACKED_PLAYER = re.compile(
@@ -17,7 +18,81 @@ _PACKED_PLAYER = re.compile(
 _LINKS = re.compile(r"var\s+links\s*=\s*(\{[^}]+\})")
 
 
-def get_direct_link_from_moflixclick(embed_url):
+_HLS_HEADERS = {
+    "Referer": "https://moflix-stream.click/",
+    "Accept-Encoding": "identity",
+}
+
+
+def _fetch_playlist(url):
+    response = requests.get(
+        url,
+        impersonate="chrome124",
+        headers=_HLS_HEADERS,
+        timeout=8,
+    )
+    response.raise_for_status()
+    return response.text or ""
+
+
+def _probe_segment(playlist_url, playlist):
+    """Read only the start of one segment to catch dead CDN origins early."""
+    segment = next(
+        (
+            line.strip()
+            for line in playlist.splitlines()
+            if line.strip() and not line.lstrip().startswith("#")
+        ),
+        None,
+    )
+    if not segment:
+        return False
+    url = urljoin(playlist_url, segment)
+    if urlparse(url).scheme != "https":
+        return False
+
+    response = requests.get(
+        url,
+        impersonate="chrome124",
+        headers=_HLS_HEADERS,
+        timeout=8,
+        stream=True,
+    )
+    try:
+        response.raise_for_status()
+        chunk = next((part for part in response.iter_content() if part), b"")
+        return bool(chunk) and not chunk.lstrip().lower().startswith(
+            (b"<html", b"<!doctype html")
+        )
+    finally:
+        response.close()
+
+
+def _has_media(url, playlist, depth=0):
+    """Check the selected video and German audio renditions, not just the master."""
+    if depth > 2 or not playlist.lstrip().startswith("#EXTM3U"):
+        return False
+    if "#EXT-X-STREAM-INF" not in playlist:
+        return _probe_segment(url, playlist)
+
+    variants, renditions = _parse_master_playlist(playlist, url)
+    if not variants:
+        return False
+    variant = max(variants, key=lambda item: item.bandwidth)
+    rendition = _select_audio_rendition(renditions, variant.audio_group, "deu")
+    children = [variant.uri]
+    if rendition is not None:
+        children.append(rendition.uri)
+    for child_url in children:
+        if urlparse(child_url).scheme != "https":
+            return False
+        if not _has_media(child_url, _fetch_playlist(child_url), depth + 1):
+            return False
+    return True
+
+
+def get_direct_links_from_moflixclick(embed_url):
+    """Return usable player HLS mirrors in the player's priority order."""
     parsed = urlparse(embed_url or "")
     if parsed.scheme != "https" or parsed.hostname != "moflix-stream.click":
         raise ValueError("Invalid MoflixClick embed URL")
@@ -38,11 +113,10 @@ def get_direct_link_from_moflixclick(embed_url):
     if links_match is None:
         raise ValueError("MoflixClick stream links not found")
     links = json.loads(links_match.group(1))
-    # The player itself tries hls4, then hls3, then hls2. Check each playlist
-    # before returning it: an unreachable hls3 would otherwise leave the queue
-    # at 0% through several 30-second download retries. The hls3 URL may end
-    # in .txt even though its response is an HLS master playlist.
+    # The player tries hls4, hls3, then hls2. A 200 response with a valid
+    # master is not enough: child playlists may return HTML or empty data.
     last_error = None
+    usable = []
     for key in ("hls4", "hls3", "hls2"):
         raw_url = links.get(key)
         if isinstance(raw_url, str) and raw_url.strip():
@@ -53,19 +127,17 @@ def get_direct_link_from_moflixclick(embed_url):
             if urlparse(url).scheme != "https":
                 continue
             try:
-                playlist = requests.get(
-                    url,
-                    impersonate="chrome124",
-                    headers={
-                        "Referer": "https://moflix-stream.click/",
-                        "Accept-Encoding": "identity",
-                    },
-                    timeout=8,
-                )
-                playlist.raise_for_status()
-                if playlist.text.lstrip().startswith("#EXTM3U"):
-                    return url
-                last_error = ValueError(f"{key} did not return an HLS playlist")
+                if _has_media(url, _fetch_playlist(url)):
+                    if url not in usable:
+                        usable.append(url)
+                else:
+                    last_error = ValueError(f"{key} has no usable HLS media playlist")
             except Exception as exc:
                 last_error = exc
-    raise ValueError("MoflixClick has no reachable HLS playlist") from last_error
+    if usable:
+        return tuple(usable)
+    raise ValueError("MoflixClick has no playable HLS mirror") from last_error
+
+
+def get_direct_link_from_moflixclick(embed_url):
+    return get_direct_links_from_moflixclick(embed_url)[0]
