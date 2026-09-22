@@ -1058,6 +1058,8 @@ def _download_hls_manual(m3u8_url, headers, temp_ts, label=""):
 
     if "#EXT-X-KEY" in playlist:
         raise _HLSManualUnsupported("encrypted playlist")
+    if "#EXT-X-MAP" in playlist or "#EXT-X-BYTERANGE" in playlist:
+        raise _HLSManualUnsupported("fragmented or byte-range playlist")
 
     segments = _hls_uris(playlist, m3u8_url)
     if not segments:
@@ -1083,17 +1085,34 @@ def _download_hls_manual(m3u8_url, headers, temp_ts, label=""):
     total = len(segments)
     ep = os.path.splitext(label)[0] if label else ""
     logger.debug(f"[DOWNLOADING] {ep} via manual HLS ({total} segments)")
+    started = time.monotonic()
+    received_bytes = 0
     try:
         with open(temp_ts, "wb") as out:
             for index, seg_url in enumerate(segments, start=1):
-                out.write(_fetch_hls_segment(session, seg_url, req_headers, seg_hosts))
+                data = _fetch_hls_segment(session, seg_url, req_headers, seg_hosts)
+                # This path concatenates MPEG-TS packets. Some hosters serve
+                # fMP4 fragments or an HTML error page under a disguised URL;
+                # those bytes cannot become a valid .ts file.
+                if len(data) < 188 or data[0] != 0x47 or (
+                    len(data) >= 376 and data[188] != 0x47
+                ):
+                    raise _HLSManualUnsupported("segment is not MPEG-TS")
+                out.write(data)
+                received_bytes += len(data)
+                elapsed = time.monotonic() - started
+                bandwidth = (
+                    f"{received_bytes / elapsed / 1024 / 1024:.1f} MB/s"
+                    if elapsed > 0
+                    else ""
+                )
                 percent = round(index / total * 100, 1)
                 with _ffmpeg_progress_lock:
                     _ffmpeg_progress.update(
                         percent=percent,
                         time=f"{index}/{total} segments",
                         speed="",
-                        bandwidth="",
+                        bandwidth=bandwidth,
                         active=True,
                     )
     except Exception:
@@ -1112,17 +1131,21 @@ def _download_hls_manual(m3u8_url, headers, temp_ts, label=""):
 def _parallel_hls_enabled(owner, stream_url):
     """Whether the shared fast HLS path should handle this episode.
 
-    Moflix is deliberately excluded: its own delivery path is already fast and
-    has provider-specific stream selection that should remain untouched.
-    Setting concurrency to one is the supported global opt-out.
+    MoflixClick may return an HLS playlist under a .txt URL. Its extractor
+    verifies the playlist content before this point, so that URL is eligible
+    too. Setting concurrency to one is the supported global opt-out.
     """
     from urllib.parse import urlparse
 
-    if ".m3u8" not in (stream_url or "").split("?", 1)[0].lower():
-        return False
+    is_m3u8 = ".m3u8" in (stream_url or "").split("?", 1)[0].lower()
     source_host = (urlparse(getattr(owner, "url", "") or "").hostname or "").lower()
     owner_module = type(owner).__module__.lower()
-    if "moflix_stream" in owner_module or source_host.startswith("moflix-stream."):
+    is_moflix = "moflix_stream" in owner_module or source_host.startswith(
+        "moflix-stream."
+    )
+    if not is_m3u8 and not (
+        is_moflix and getattr(owner, "selected_provider", None) == "MoflixClick"
+    ):
         return False
     try:
         from .hls import get_concurrency
@@ -1190,6 +1213,7 @@ def _download_full_stream(
     unsupported playlist falls back to the old manual/FFmpeg path unchanged.
     Returns True when the parallel path was used.
     """
+    parallel_remux_failed = False
     if parallel_hls:
         from .hls import cleanup_temp_files
 
@@ -1229,10 +1253,16 @@ def _download_full_stream(
                     keep_progress=True,
                 )
                 return True
+            except RuntimeError as exc:
+                logger.warning(
+                    f"[HLS] parallel remux failed ({exc}); retrying the HLS playlist"
+                )
+                temp_full.unlink(missing_ok=True)
+                parallel_remux_failed = True
             finally:
                 cleanup_temp_files(temp_prefix)
 
-    if ".m3u8" in stream_url.split("?", 1)[0].lower():
+    if not parallel_remux_failed and ".m3u8" in stream_url.split("?", 1)[0].lower():
         temp_ts = temp_full.with_suffix(".seg.ts")
         try:
             _download_hls_manual(stream_url, headers, temp_ts, ep_label)
@@ -1250,6 +1280,11 @@ def _download_full_stream(
                     label=ep_label,
                 )
                 return False
+            except RuntimeError as exc:
+                logger.warning(
+                    f"[HLS] local segment remux failed ({exc}); retrying the HLS playlist with FFmpeg"
+                )
+                temp_full.unlink(missing_ok=True)
             finally:
                 temp_ts.unlink(missing_ok=True)
 
@@ -1300,7 +1335,9 @@ def download(self):
                 # non-.ts extensions like .jpg; ffmpeg 7+ refuses those by default
                 # ("not in allowed_segment_extensions"), so allow every segment
                 # extension for m3u8 inputs.
-                if ".m3u8" in (stream_url or "").split("?", 1)[0].lower():
+                if ".m3u8" in (stream_url or "").split("?", 1)[0].lower() or (
+                    provider_name == "MoflixClick"
+                ):
                     input_kwargs["allowed_extensions"] = "ALL"
                 if headers:
                     header_list = [f"{k}: {v}" for k, v in headers.items()]

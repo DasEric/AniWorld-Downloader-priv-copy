@@ -154,7 +154,13 @@ v.ts
             "https://moflix-stream.xyz/titles/42",
             "https://cdn.example/master.m3u8",
             "8",
-            False,
+            True,
+        ),
+        (
+            "https://moflix-stream.xyz/titles/42",
+            "https://cdn.example/master.txt",
+            "8",
+            True,
         ),
         (
             "https://aniworld.to/anime/stream/show/staffel-1/episode-1",
@@ -172,7 +178,7 @@ v.ts
 )
 def test_parallel_hls_scope(monkeypatch, page_url, stream_url, concurrency, expected):
     monkeypatch.setenv("ANIWORLD_HLS_CONCURRENCY", concurrency)
-    owner = SimpleNamespace(url=page_url)
+    owner = SimpleNamespace(url=page_url, selected_provider="MoflixClick")
     assert common._parallel_hls_enabled(owner, stream_url) is expected
 
 
@@ -269,3 +275,136 @@ def test_ffmpeg_output_growth_is_not_claimed_as_network_speed(monkeypatch):
     assert progress["active"] is True
     assert progress["percent"] == 100.0
     assert progress["bandwidth"] == ""
+
+
+def test_manual_hls_reports_measured_transfer_rate(monkeypatch, tmp_path):
+    playlist = "#EXTM3U\n#EXTINF:5,\nfirst.jpg\n#EXTINF:5,\nsecond.jpg\n#EXT-X-ENDLIST\n"
+    packet = b"\x47" + b"\x00" * 187
+
+    class Response:
+        text = playlist
+
+        def raise_for_status(self):
+            pass
+
+    class Session:
+        def get(self, *_args, **_kwargs):
+            return Response()
+
+    observed = []
+
+    def fetch(*_args, **_kwargs):
+        observed.append(common.get_ffmpeg_progress()["bandwidth"])
+        return packet * 2
+
+    monkeypatch.setattr(common.niquests, "Session", Session)
+    monkeypatch.setattr(common, "_fetch_hls_segment", fetch)
+    output = tmp_path / "episode.seg.ts"
+
+    common._download_hls_manual(
+        "https://cdn.example/master.m3u8", {}, output, "Episode"
+    )
+
+    assert output.read_bytes() == packet * 4
+    assert observed[1].endswith(" MB/s")
+    assert common.get_ffmpeg_progress()["active"] is False
+
+
+@pytest.mark.parametrize(
+    "playlist,payload",
+    [
+        (
+            "#EXTM3U\n#EXTINF:5,\nfirst.jpg\n#EXT-X-ENDLIST\n",
+            b"<html>temporary CDN failure</html>",
+        ),
+        (
+            "#EXTM3U\n#EXT-X-MAP:URI=\"init.mp4\"\n#EXTINF:5,\nfirst.m4s\n#EXT-X-ENDLIST\n",
+            None,
+        ),
+    ],
+)
+def test_manual_hls_rejects_non_ts_media(monkeypatch, tmp_path, playlist, payload):
+    class Response:
+        text = playlist
+
+        def raise_for_status(self):
+            pass
+
+    class Session:
+        def get(self, *_args, **_kwargs):
+            return Response()
+
+    monkeypatch.setattr(common.niquests, "Session", Session)
+    if payload is not None:
+        monkeypatch.setattr(
+            common, "_fetch_hls_segment", lambda *_args, **_kwargs: payload
+        )
+    output = tmp_path / "episode.seg.ts"
+
+    with pytest.raises(common._HLSManualUnsupported):
+        common._download_hls_manual("https://cdn.example/master.m3u8", {}, output)
+
+    assert not output.exists()
+
+
+def test_failed_local_hls_remux_retries_original_playlist(monkeypatch, tmp_path):
+    output = tmp_path / "episode.temp_full.mkv"
+    playlist = "https://cdn.example/master.m3u8"
+    inputs = []
+
+    def manual(_url, _headers, temp_ts, _label):
+        temp_ts.write_bytes(b"bad transport stream")
+
+    def ffmpeg_run(node, **_kwargs):
+        args = common.ffmpeg.compile(node)
+        inputs.append(args[args.index("-i") + 1])
+        if len(inputs) == 1:
+            output.write_bytes(b"partial output")
+            raise RuntimeError("invalid input")
+        assert not output.exists()
+
+    monkeypatch.setattr(common, "_download_hls_manual", manual)
+    monkeypatch.setattr(common, "_run_ffmpeg_with_progress", ffmpeg_run)
+
+    used_parallel = common._download_full_stream(
+        playlist, output, {}, {}, {}, "copy", "Episode", "deu"
+    )
+
+    assert used_parallel is False
+    assert inputs == [str(output.with_suffix(".seg.ts")), playlist]
+    assert not output.with_suffix(".seg.ts").exists()
+
+
+def test_failed_parallel_remux_retries_original_playlist(monkeypatch, tmp_path):
+    output = tmp_path / "episode.temp_full.mkv"
+    playlist = "https://cdn.example/master.m3u8"
+    segment = tmp_path / "episode.temp_full.hls_video.mp4"
+    segment.write_bytes(b"bad fragment")
+    inputs = []
+
+    monkeypatch.setattr(
+        common, "_try_parallel_hls", lambda *_args, **_kwargs: [segment]
+    )
+    monkeypatch.setattr(
+        common,
+        "_download_hls_manual",
+        lambda *_args, **_kwargs: pytest.fail("must not redownload the same segments"),
+    )
+
+    def ffmpeg_run(node, **_kwargs):
+        args = common.ffmpeg.compile(node)
+        inputs.append(args[args.index("-i") + 1])
+        if len(inputs) == 1:
+            output.write_bytes(b"partial output")
+            raise RuntimeError("invalid fragment")
+        assert not output.exists()
+
+    monkeypatch.setattr(common, "_run_ffmpeg_with_progress", ffmpeg_run)
+
+    used_parallel = common._download_full_stream(
+        playlist, output, {}, {}, {}, "copy", "Episode", "deu", parallel_hls=True
+    )
+
+    assert used_parallel is False
+    assert inputs == [str(segment), playlist]
+    assert not segment.exists()
