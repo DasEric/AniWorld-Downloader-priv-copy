@@ -6,7 +6,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from aniworld.extractors.provider import gupload, moflixclick, vidara
+from aniworld.extractors.provider import gupload, moflixclick, veev, vidara
 from aniworld.models.common.provider_map import host_to_provider
 from aniworld.models.moflix_stream import series as moflix
 from aniworld.search import fetch_moflix_movies, query_moflix
@@ -134,6 +134,7 @@ def test_series_listing_does_not_probe_every_episode(client, monkeypatch):
 def test_mirror_names_are_not_mistaken_for_other_hosters():
     assert host_to_provider("gupload.xyz") == "Gupload"
     assert host_to_provider("moflix-stream.click") == "MoflixClick"
+    assert host_to_provider("veev.to") == "Veev"
     assert host_to_provider("vidara.to") == "Vidara"
     assert host_to_provider("moflix.upns.xyz") is None
     assert host_to_provider("streamtape.com") is None
@@ -600,9 +601,24 @@ def test_vidara_uses_its_stream_api(monkeypatch):
     )
 
 
-@pytest.mark.parametrize("provider", ["Gupload", "MoflixClick", "Vidara"])
+def test_veev_uses_player_handshake(monkeypatch):
+    from aniworld.playwright import captcha
+
+    direct = "https://edge.veevcdn.co/signed/video"
+    monkeypatch.setattr(captcha, "playwright_get_veev_stream_url", lambda _url: direct)
+
+    assert veev.get_direct_link_from_veev("https://veev.to/e/sample") == direct
+
+
+@pytest.mark.parametrize("url", ["http://veev.to/e/sample", "https://example.com/e/x"])
+def test_veev_rejects_untrusted_embed_urls(url):
+    with pytest.raises(ValueError, match="Invalid Veev embed URL"):
+        veev.get_direct_link_from_veev(url)
+
+
+@pytest.mark.parametrize("provider", ["Gupload", "MoflixClick", "Veev", "Vidara"])
 def test_moflix_provider_headers_avoid_encoded_playlists(provider):
     from aniworld.config import PROVIDER_HEADERS_D
 
-    if provider in {"Gupload", "MoflixClick"}:
+    if provider in {"Gupload", "MoflixClick", "Veev"}:
         assert PROVIDER_HEADERS_D[provider]["Accept-Encoding"] == "identity"

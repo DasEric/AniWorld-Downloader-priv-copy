@@ -25,6 +25,7 @@ _ALIASES = (
     ("vidara.so", "Vidara"),
     ("filemoon", "Filemoon"),
     ("moflix-stream.click", "MoflixClick"),
+    ("veev.to", "Veev"),
     ("streamtape", "Streamtape"),
     ("luluvdo", "Luluvdo"),
     ("vids.st", "Streamtape"),

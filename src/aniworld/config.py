@@ -188,6 +188,7 @@ SUPPORTED_PROVIDERS = (
     "Filemoon",
     "Gupload",
     "MoflixClick",
+    "Veev",
     "Vidara",
     # "LoadX",
     # "Luluvdo",
@@ -287,6 +288,7 @@ PROVIDER_HEADERS_D = {
         "Referer": "https://moflix-stream.click/",
         "Accept-Encoding": "identity",
     },
+    "Veev": {"Referer": "https://veev.to/", "Accept-Encoding": "identity"},
     "Vidara": {"Referer": "https://vidara.to/"},
     "Luluvdo": {
         "User-Agent": LULUVDO_USER_AGENT,
@@ -321,6 +323,7 @@ PROVIDER_HEADERS_W = {
         "Referer": "https://moflix-stream.click/",
         "Accept-Encoding": "identity",
     },
+    "Veev": {"Referer": "https://veev.to/", "Accept-Encoding": "identity"},
     "Vidara": {"Referer": "https://vidara.to/"},
     "Luluvdo": {
         "User-Agent": LULUVDO_USER_AGENT,

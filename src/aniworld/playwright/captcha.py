@@ -2064,6 +2064,72 @@ def playwright_get_cineby_stream_url(url: str, timeout: int = 40) -> str:
         return None
 
 
+def playwright_get_veev_stream_url(url: str, timeout: int = 30) -> str:
+    """Run Veev's player handshake and capture its signed media URL."""
+    from urllib.parse import urlparse
+
+    try:
+        from patchright.sync_api import sync_playwright
+    except ImportError:
+        raise RuntimeError(
+            "patchright is not installed. Install it with: "
+            "pip install patchright && patchright install chromium"
+        )
+
+    from ..logger import get_logger
+
+    logger = get_logger(__name__)
+    final_url = None
+
+    try:
+        with sync_playwright() as p:
+            _handle = _launch_browser_context(p, offscreen=True)
+            page = _handle.context.new_page()
+
+            def _capture(response):
+                nonlocal final_url
+                response_url = response.url
+                content_type = response.headers.get("content-type", "").lower()
+                host = urlparse(response_url).hostname or ""
+                if (
+                    not final_url
+                    and response.status in (200, 206)
+                    and (host == "veevcdn.co" or host.endswith(".veevcdn.co"))
+                    and "video/" in content_type
+                ):
+                    final_url = response_url
+
+            page.on("response", _capture)
+            logger.debug(f"Opening Veev embed for stream capture: {url}")
+            try:
+                page.goto(url, wait_until="domcontentloaded", timeout=40000)
+            except Exception:
+                pass
+            page.wait_for_timeout(2000)
+
+            deadline = _time.time() + timeout
+            while _time.time() < deadline and not final_url:
+                try:
+                    page.mouse.click(640, 360)
+                    page.evaluate(
+                        "() => { const v = document.querySelector('video');"
+                        " if (v) { v.muted = true; if (v.paused) v.play().catch(()=>{}); } }"
+                    )
+                except Exception:
+                    pass
+                page.wait_for_timeout(1000)
+
+            _handle.close()
+
+        if not final_url:
+            raise TimeoutError(f"Veev stream capture timed out after {timeout}s")
+        logger.info("Captured Veev media URL")
+        return final_url
+    except Exception as exc:
+        logger.error(f"Failed to capture Veev stream URL: {exc}")
+        raise RuntimeError(f"Failed to capture Veev stream URL: {exc}") from exc
+
+
 def solve_sto_modal(
     episode_url: str,
     provider_name: str,
