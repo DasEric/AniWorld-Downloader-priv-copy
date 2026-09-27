@@ -1,13 +1,77 @@
 {% extends "base.html" %}
+
 {% block title %}Upcoming - AniWorld Downloader{% endblock %}
+
 {% block content %}
-<div class="page-header"><div><h1 data-i18n="upcoming.title">Upcoming movies</h1><p class="subtitle" data-i18n="upcoming.subtitle">Track unreleased movies and queue them after an exact match is found.</p></div><button class="btn btn-secondary" id="checkUpcomingBtn" data-i18n="upcoming.check">Check now</button></div>
-<section class="card" id="tmdbMissing" hidden><p data-i18n="upcoming.configure">Add your TMDB key under Settings → Integrations first.</p><a class="btn btn-primary" href="{{ url_for('pages.settings') }}#integrations" data-i18n="upcoming.open_settings">Open settings</a></section>
-<section class="card">
-  <h2 data-i18n="upcoming.add">Add movie</h2>
-  <div class="inline-form"><input id="upcomingSearch" type="search" placeholder="Movie title"/><button class="btn btn-primary" id="searchUpcomingBtn" data-i18n="index.search">Search</button><button class="btn btn-secondary" id="browseUpcomingBtn" data-i18n="upcoming.browse">TMDB upcoming</button></div>
-  <div id="upcomingResults" class="upcoming-grid"></div>
-</section>
-<section class="card"><div class="section-head"><h2 data-i18n="upcoming.watchlist">Watchlist</h2><span class="hint" id="upcomingSchedule"></span></div><div id="upcomingList"></div></section>
+<div class="container container-narrow">
+  <div class="page-head">
+    <h1 data-i18n="upcoming.title">Upcoming movies</h1>
+    <button class="btn btn-primary" id="checkUpcomingBtn" data-i18n="upcoming.check" disabled>Check now</button>
+  </div>
+
+  <section class="card">
+    <h2 data-i18n="upcoming.how_title">How it works</h2>
+    <p class="hint" data-i18n="upcoming.subtitle">
+      Track unreleased movies. Once a day, enabled movie sites are checked and a download is queued only after an exact
+      title and release-year match, or a direct TMDB match, has a usable provider.
+    </p>
+    <div class="notice" id="upcomingModeNotice" data-i18n="upcoming.mode_notice">
+      Only exact matches are downloaded. Ambiguous or unavailable movies remain on the watchlist.
+    </div>
+    <div class="notice upcoming-config-notice" id="tmdbMissing" hidden>
+      <div>
+        <strong data-i18n="upcoming.tmdb_required">TMDB key required</strong>
+        <div data-i18n="upcoming.configure">Add your TMDB key under Settings → Integrations first.</div>
+      </div>
+      <a class="btn btn-primary" href="{{ url_for('pages.settings') }}#integrations"
+        data-i18n="upcoming.open_settings">Open settings</a>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2 data-i18n="upcoming.add">Add movie</h2>
+    <p class="hint" data-i18n="upcoming.add_hint">
+      Search TMDB by title or browse upcoming theatrical releases in Germany.
+    </p>
+    <div class="control-row upcoming-search-row">
+      <label class="field">
+        <span class="field-label" data-i18n="upcoming.movie_title">Movie title</span>
+        <input id="upcomingSearch" type="search" autocomplete="off" disabled
+          data-i18n-placeholder="upcoming.movie_title" placeholder="Movie title" />
+      </label>
+      <button class="btn btn-primary" id="searchUpcomingBtn" data-i18n="index.search" disabled>Search</button>
+      <button class="btn btn-secondary" id="browseUpcomingBtn" data-i18n="upcoming.browse" disabled>TMDB upcoming</button>
+    </div>
+    <div id="upcomingResults" class="upcoming-results" hidden></div>
+  </section>
+
+  <section class="card">
+    <h2 data-i18n="upcoming.watchlist">Watchlist</h2>
+    <table class="data-table stacked-table">
+      <thead>
+        <tr>
+          <th data-i18n="upcoming.movie">Movie</th>
+          <th data-i18n="upcoming.release">Release</th>
+          <th data-i18n="upcoming.status">Status</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="upcomingList"></tbody>
+    </table>
+  </section>
+
+  <section class="card">
+    <h2 data-i18n="upcoming.status">Status</h2>
+    <div class="sync-stats">
+      <div><div class="ip-label">TMDB</div><div class="sync-value" id="upcomingTmdbState">-</div></div>
+      <div><div class="ip-label" data-i18n="upcoming.watched">Watched movies</div><div class="sync-value" id="upcomingCount">0</div></div>
+      <div><div class="ip-label" data-i18n="autosync.last_run">Last run</div><div class="sync-value" id="upcomingLastRun">-</div></div>
+      <div><div class="ip-label" data-i18n="autosync.next_run">Next run</div><div class="sync-value" id="upcomingNextRun">-</div></div>
+    </div>
+  </section>
+</div>
 {% endblock %}
-{% block scripts %}<script src="{{ url_for('static', filename='upcoming.js') }}?v={{ app_version }}"></script>{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='upcoming.js') }}?v={{ app_version }}-page-layout"></script>
+{% endblock %}

@@ -15,6 +15,16 @@ MOVIE = {
 }
 
 
+def test_upcoming_page_uses_the_same_layout_language_as_autosync(client):
+    page = client.get("/upcoming")
+    assert page.status_code == 200
+    html = page.get_data(as_text=True)
+    assert 'class="container container-narrow"' in html
+    assert 'class="page-head"' in html
+    assert 'class="data-table stacked-table"' in html
+    assert 'class="sync-stats"' in html
+
+
 def test_tmdb_http_error_does_not_leak_v3_key(monkeypatch):
     secret = "1234567890abcdef1234567890abcdef"
     monkeypatch.setenv("ANIWORLD_TMDB_API_KEY", secret)

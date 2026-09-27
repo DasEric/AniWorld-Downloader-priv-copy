@@ -1,1545 +1,468 @@
-diff --git a/pyproject.toml b/pyproject.toml
-index b967aaa..391080e 100644
---- a/pyproject.toml
-+++ b/pyproject.toml
-@@ -24,6 +24,7 @@ dependencies = [
-   "cryptography",                                                             # !=3.9.0, !=3.9.1, >=3.9
-   "patchright",                                                               # >=3.9
-   "curl_cffi",                                                                # TLS impersonation for Cloudflare-gated hosters (VOE)
-+  "yt-dlp",                                                                   # resilient multi-fragment transfer fallback
-   'windows-curses<3.14; sys_platform == "win32" and python_version < "3.14"', # ??? - npyscreen on Windows
- ]
- 
-diff --git a/src/aniworld/.env.example b/src/aniworld/.env.example
-index 6eda2c2..9c0f659 100644
---- a/src/aniworld/.env.example
-+++ b/src/aniworld/.env.example
-@@ -79,6 +79,10 @@ ANIWORLD_PROVIDER_FALLBACK_ORDER=VOE,Vidmoly,Vidoza,Doodstream
- # Higher is faster until the host starts refusing connections; 1 disables it.
- ANIWORLD_HLS_CONCURRENCY=8
- 
-+# TMDB v3 API key or v4 read token for the Upcoming movie watchlist.
-+# Stored as a secret by the web settings and deliberately omitted from exports.
-+ANIWORLD_TMDB_API_KEY=
-+
- # Override the Kinox domain, e.g. when the default one is blocked for you.
- # Leave empty to use kinox.to.
- ANIWORLD_KINOX_DOMAIN=
-diff --git a/src/aniworld/models/common/common.py b/src/aniworld/models/common/common.py
-index fd17ad6..9db39e2 100644
---- a/src/aniworld/models/common/common.py
-+++ b/src/aniworld/models/common/common.py
-@@ -444,7 +444,51 @@ _ffmpeg_progress = {
-     "speed": "",
-     "bandwidth": "",
-     "active": False,
-+    "queue_id": None,
-+    "episode_index": None,
- }
-+_episode_context = threading.local()
-+
-+
-+def set_episode_download_context(queue_id, episode_index, hls_concurrency):
-+    """Freeze per-episode settings so UI changes only affect the next episode."""
-+    _episode_context.queue_id = queue_id
-+    _episode_context.episode_index = episode_index
-+    _episode_context.hls_concurrency = hls_concurrency
-+    with _ffmpeg_progress_lock:
-+        _ffmpeg_progress.update(
-+            percent=0.0,
-+            time="",
-+            speed="",
-+            bandwidth="",
-+            active=False,
-+            queue_id=queue_id,
-+            episode_index=episode_index,
-+        )
-+
-+
-+def clear_episode_download_context():
-+    for name in ("queue_id", "episode_index", "hls_concurrency"):
-+        if hasattr(_episode_context, name):
-+            delattr(_episode_context, name)
-+    with _ffmpeg_progress_lock:
-+        _ffmpeg_progress.update(
-+            percent=0.0,
-+            time="",
-+            speed="",
-+            bandwidth="",
-+            active=False,
-+            queue_id=None,
-+            episode_index=None,
-+        )
-+
-+
-+def _episode_hls_concurrency():
-+    value = getattr(_episode_context, "hls_concurrency", None)
-+    if value is not None:
-+        return value
-+    from .hls import get_concurrency
-+    return get_concurrency()
- 
- 
- def get_ffmpeg_progress():
-@@ -935,6 +979,7 @@ def _download_hls_stream(
-                 headers=headers,
-                 preferred_audio_lang=audio_lang,
-                 label=ep_label,
-+                concurrency=_episode_hls_concurrency(),
-             )
-         except HLSUnsupported as exc:
-             logger.debug(
-@@ -1209,9 +1254,7 @@ def _parallel_hls_enabled(owner, stream_url):
-     ):
-         return False
-     try:
--        from .hls import get_concurrency
--
--        return get_concurrency() > 1
-+        return _episode_hls_concurrency() > 1
-     except ImportError:
-         return False
- 
-@@ -1239,6 +1282,7 @@ def _try_parallel_hls(
-             include_audio=include_audio,
-             progress_end=progress_end,
-             keep_progress=True,
-+            concurrency=_episode_hls_concurrency(),
-         )
-     except DownloadCancelled:
-         raise
-@@ -1377,6 +1421,44 @@ def _download_full_stream(
-             finally:
-                 temp_ts.unlink(missing_ok=True)
- 
-+    # yt-dlp has the mature retry/chunking path used by the reference downloader.
-+    # Keep the proven FFmpeg path as a compatibility fallback.
-+    try:
-+        from .transfer import download_with_ytdlp
-+
-+        def _ytdlp_progress(data):
-+            try:
-+                from ...playwright.captcha import _local
-+                from ...web.db import is_queue_force_cancelled
-+                queue_id = getattr(_local, "queue_id", None)
-+                if queue_id is not None and is_queue_force_cancelled(queue_id):
-+                    raise DownloadCancelled("Download cancelled")
-+            except DownloadCancelled:
-+                raise
-+            except Exception:
-+                pass
-+            status = data.get("status")
-+            total = data.get("total_bytes") or data.get("total_bytes_estimate") or 0
-+            downloaded = data.get("downloaded_bytes") or 0
-+            percent = min(95.0, (downloaded / total * 95.0) if total else 0.0)
-+            speed = data.get("speed") or 0
-+            bandwidth = f"{speed / 1024 / 1024:.1f} MB/s" if speed else ""
-+            with _ffmpeg_progress_lock:
-+                _ffmpeg_progress.update(percent=percent, time="", speed="", bandwidth=bandwidth,
-+                                        active=status != "finished")
-+
-+        download_with_ytdlp(stream_url, temp_full, headers,
-+                            _episode_hls_concurrency(), _ytdlp_progress)
-+        with _ffmpeg_progress_lock:
-+            _ffmpeg_progress.update(percent=95.0, active=True)
-+        return True
-+    except DownloadCancelled:
-+        temp_full.unlink(missing_ok=True)
-+        raise
-+    except Exception as exc:
-+        logger.debug(f"[TRANSFER] yt-dlp unavailable for this stream ({exc}); using FFmpeg")
-+        temp_full.unlink(missing_ok=True)
-+
-     _run_ffmpeg_with_progress(
-         ffmpeg.input(stream_url, **input_kwargs).output(
-             str(temp_full),
-diff --git a/src/aniworld/models/common/hls.py b/src/aniworld/models/common/hls.py
-index 1c693e0..4066ce7 100644
---- a/src/aniworld/models/common/hls.py
-+++ b/src/aniworld/models/common/hls.py
-@@ -549,7 +549,7 @@ def _load_media_playlist(playlist_url, headers):
-     return _MediaPlaylist(playlist_url, segments, init_uri)
- 
- 
--def _download_playlist(playlist, headers, temp_prefix, suffix, tracker):
-+def _download_playlist(playlist, headers, temp_prefix, suffix, tracker, concurrency):
-     """Fetch every segment of a media playlist, in order, into one file.
- 
-     Returns the path written. The extension reflects the segment container so
-@@ -559,7 +559,6 @@ def _download_playlist(playlist, headers, temp_prefix, suffix, tracker):
-     output_path = temp_prefix.with_suffix(
-         f"{suffix}{'.mp4' if playlist.init_uri else '.ts'}"
-     )
--    concurrency = get_concurrency()
- 
-     key_cache = {}
-     key_cache_lock = threading.Lock()
-@@ -649,6 +648,7 @@ def download_hls_parallel(
-     include_audio=True,
-     progress_end=100.0,
-     keep_progress=False,
-+    concurrency=None,
- ):
-     """Download an HLS stream into local files ready for an FFmpeg remux.
- 
-@@ -658,7 +658,9 @@ def download_hls_parallel(
-     Raises `HLSUnsupported` when the playlist needs features this downloader
-     does not implement — callers should fall back to plain FFmpeg then.
-     """
--    if get_concurrency() == 1:
-+    concurrency = get_concurrency() if concurrency is None else int(concurrency)
-+    concurrency = max(1, min(concurrency, MAX_CONCURRENCY))
-+    if concurrency == 1:
-         raise HLSUnsupported("parallel HLS download disabled")
- 
-     temp_prefix = Path(temp_prefix)
-@@ -706,14 +708,14 @@ def download_hls_parallel(
-         _publish_progress(percent=0.0, time="", speed="", bandwidth="", active=True)
-         written.append(
-             _download_playlist(
--                video_media, headers, temp_prefix, ".hls_video", tracker
-+                video_media, headers, temp_prefix, ".hls_video", tracker, concurrency
-             )
-         )
- 
-         if audio_media:
-             written.append(
-                 _download_playlist(
--                    audio_media, headers, temp_prefix, ".hls_audio", tracker
-+                    audio_media, headers, temp_prefix, ".hls_audio", tracker, concurrency
-                 )
-             )
- 
-diff --git a/src/aniworld/models/common/transfer.py b/src/aniworld/models/common/transfer.py
-new file mode 100644
-index 0000000..0de9b99
---- /dev/null
-+++ b/src/aniworld/models/common/transfer.py
-@@ -0,0 +1,38 @@
-+"""Fast resilient transfer fallback powered by yt-dlp."""
-+
-+from pathlib import Path
-+
-+
-+class TransferUnavailable(RuntimeError):
-+    pass
-+
-+
-+def download_with_ytdlp(url, output_path, headers, concurrency, progress_hook):
-+    try:
-+        from yt_dlp import YoutubeDL
-+    except ImportError as exc:
-+        raise TransferUnavailable("yt-dlp is not installed") from exc
-+
-+    output_path = Path(output_path)
-+    options = {
-+        "outtmpl": str(output_path),
-+        "format": "bestvideo+bestaudio/best",
-+        "merge_output_format": output_path.suffix.lstrip(".") or "mkv",
-+        "http_headers": dict(headers or {}),
-+        "concurrent_fragment_downloads": max(1, int(concurrency)),
-+        "fragment_retries": 10,
-+        "retries": 10,
-+        "socket_timeout": 30,
-+        "http_chunk_size": 10 * 1024 * 1024,
-+        "progress_hooks": [progress_hook],
-+        "quiet": True,
-+        "no_warnings": True,
-+        "noplaylist": True,
-+        "nopart": True,
-+        "overwrites": True,
-+    }
-+    with YoutubeDL(options) as downloader:
-+        code = downloader.download([url])
-+    if code or not output_path.exists() or output_path.stat().st_size == 0:
-+        raise TransferUnavailable("yt-dlp did not produce the requested file")
-+    return output_path
-diff --git a/src/aniworld/web/app.py b/src/aniworld/web/app.py
-index 786e7d5..b30a853 100644
---- a/src/aniworld/web/app.py
-+++ b/src/aniworld/web/app.py
-@@ -229,6 +229,8 @@ def _start_background_services():
-     _wire_captcha_hooks()
-     worker.ensure_started()
-     autosync.ensure_started()
-+    from . import upcoming
-+    upcoming.ensure_started()
-     try:
-         from .discord_bot import start_if_enabled
- 
-diff --git a/src/aniworld/web/db.py b/src/aniworld/web/db.py
-index e420b8b..fe398a9 100644
---- a/src/aniworld/web/db.py
-+++ b/src/aniworld/web/db.py
-@@ -206,6 +206,34 @@ _SCHEMA = (
-     )
-     """,
-     "CREATE INDEX IF NOT EXISTS idx_api_key_hash ON api_keys (key_hash)",
-+    """
-+    CREATE TABLE IF NOT EXISTS upcoming_movies (
-+        id INTEGER PRIMARY KEY AUTOINCREMENT,
-+        tmdb_id INTEGER NOT NULL UNIQUE,
-+        title TEXT NOT NULL,
-+        original_title TEXT NOT NULL DEFAULT '',
-+        release_date TEXT NOT NULL,
-+        release_year INTEGER NOT NULL,
-+        poster_path TEXT,
-+        overview TEXT NOT NULL DEFAULT '',
-+        language TEXT NOT NULL DEFAULT 'German Dub',
-+        provider TEXT NOT NULL DEFAULT 'VOE',
-+        custom_path_id INTEGER,
-+        status TEXT NOT NULL DEFAULT 'waiting',
-+        matched_url TEXT,
-+        queue_id INTEGER,
-+        last_checked_at TEXT,
-+        last_message TEXT,
-+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
-+    )
-+    """,
-+    "CREATE INDEX IF NOT EXISTS idx_upcoming_status ON upcoming_movies (status, release_date)",
-+    """
-+    CREATE TABLE IF NOT EXISTS upcoming_state (
-+        key TEXT PRIMARY KEY,
-+        value TEXT
-+    )
-+    """,
- )
- 
- # Columns added after the first release. Older databases get them via ALTER.
-@@ -466,6 +494,64 @@ def add_to_queue(
-         return queue_id
- 
- 
-+def list_upcoming_movies():
-+    with session() as conn:
-+        return _rows(conn, "SELECT * FROM upcoming_movies ORDER BY release_date, id")
-+
-+
-+def get_upcoming_movie(movie_id):
-+    with session() as conn:
-+        row = conn.execute("SELECT * FROM upcoming_movies WHERE id = ?", (movie_id,)).fetchone()
-+        return dict(row) if row else None
-+
-+
-+def add_upcoming_movie(movie, language="German Dub", provider="VOE", custom_path_id=None):
-+    with session() as conn:
-+        cur = conn.execute(
-+            "INSERT INTO upcoming_movies (tmdb_id,title,original_title,release_date,release_year,poster_path,overview,language,provider,custom_path_id) VALUES (?,?,?,?,?,?,?,?,?,?)",
-+            (movie["tmdb_id"], movie["title"], movie.get("original_title", ""),
-+             movie["release_date"], movie["release_year"], movie.get("poster_path"),
-+             movie.get("overview", ""), language, provider, custom_path_id),
-+        )
-+        return cur.lastrowid
-+
-+
-+def update_upcoming_movie(movie_id, **fields):
-+    allowed = {"status", "matched_url", "queue_id", "last_checked_at", "last_message", "language", "provider", "custom_path_id"}
-+    values = {key: value for key, value in fields.items() if key in allowed}
-+    if not values:
-+        return
-+    with session() as conn:
-+        conn.execute(
-+            f"UPDATE upcoming_movies SET {', '.join(f'{key} = ?' for key in values)} WHERE id = ?",
-+            (*values.values(), movie_id),
-+        )
-+
-+
-+def delete_upcoming_movie(movie_id):
-+    with session() as conn:
-+        conn.execute("DELETE FROM upcoming_movies WHERE id = ?", (movie_id,))
-+
-+
-+def upcoming_state_get(key):
-+    with session() as conn:
-+        row = conn.execute("SELECT value FROM upcoming_state WHERE key = ?", (key,)).fetchone()
-+        return row[0] if row else None
-+
-+
-+def upcoming_state_set(key, value):
-+    with session() as conn:
-+        conn.execute("INSERT INTO upcoming_state(key,value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", (key, value))
-+
-+
-+def finish_upcoming_queue(queue_id, queue_status):
-+    status = "downloaded" if queue_status == "completed" else "error"
-+    message = "Download completed" if status == "downloaded" else "Queued download failed"
-+    with session() as conn:
-+        conn.execute("UPDATE upcoming_movies SET status = ?, last_message = ? WHERE queue_id = ?",
-+                     (status, message, queue_id))
-+
-+
- # How long the item has been downloading, NULL until it starts. Both timestamps
- # come from sqlite, so this stays right no matter what clock the browser has.
- # strftime('%s') gives whole seconds, julianday would be a float that rounds down.
-diff --git a/src/aniworld/web/settings_store.py b/src/aniworld/web/settings_store.py
-index 9ad2a3a..658de5f 100644
---- a/src/aniworld/web/settings_store.py
-+++ b/src/aniworld/web/settings_store.py
-@@ -31,6 +31,10 @@ load_dotenv(PANEL_SETTINGS_PATH, override=True)
- 
- UI_LANGUAGES = ("en", "de")
- OUTPUT_FORMATS = ("mkv", "mp4")
-+DEFAULT_HLS_CONCURRENCY = 8
-+MIN_HLS_CONCURRENCY = 1
-+MAX_HLS_CONCURRENCY = 32
-+TMDB_KEY = "ANIWORLD_TMDB_API_KEY"
- 
- # How Auto-Sync decides when to run: every so often, or at fixed times
- AUTOSYNC_MODES = ("interval", "cron")
-@@ -195,6 +199,34 @@ def default_language():
-     return language if language in LANG_LABELS.values() else "German Dub"
- 
- 
-+def hls_concurrency():
-+    """Parallel HLS connections used for the next episode that starts."""
-+    raw = os.environ.get("ANIWORLD_HLS_CONCURRENCY", str(DEFAULT_HLS_CONCURRENCY))
-+    try:
-+        value = int(raw)
-+    except (TypeError, ValueError):
-+        logger.warning("Ignoring invalid ANIWORLD_HLS_CONCURRENCY=%r", raw)
-+        return DEFAULT_HLS_CONCURRENCY
-+    if not MIN_HLS_CONCURRENCY <= value <= MAX_HLS_CONCURRENCY:
-+        logger.warning("Ignoring out-of-range ANIWORLD_HLS_CONCURRENCY=%r", raw)
-+        return DEFAULT_HLS_CONCURRENCY
-+    return value
-+
-+
-+def tmdb_settings():
-+    """Return secret metadata only; the key itself never leaves the server."""
-+    return {"key_set": bool(os.environ.get(TMDB_KEY, "").strip())}
-+
-+
-+def _collect_tmdb(payload, updates):
-+    if not isinstance(payload, dict):
-+        raise SettingsError("tmdb must be an object")
-+    if "api_key" in payload:
-+        value = str(payload["api_key"]).strip()
-+        if value != SECRET_PLACEHOLDER:
-+            updates[TMDB_KEY] = value
-+
-+
- # ---------------------------------------------------------------------------
- # Naming template (drives the output container)
- # ---------------------------------------------------------------------------
-@@ -393,6 +425,9 @@ def read_settings():
-         "movie_folder": _flag("ANIWORLD_MOVIE_FOLDER", "1"),
-         "ui_language": ui_language(),
-         "output_format": output_format(),
-+        "hls_concurrency": hls_concurrency(),
-+        "hls_concurrency_min": MIN_HLS_CONCURRENCY,
-+        "hls_concurrency_max": MAX_HLS_CONCURRENCY,
-         "provider_fallback_order": list(get_provider_fallback_order(WORKING_PROVIDERS)),
-         "available_providers": list(WORKING_PROVIDERS),
-         "available_ui_languages": list(UI_LANGUAGES),
-@@ -407,6 +442,7 @@ def read_settings():
-             for site in SITE_KEYS
-         ],
-         "discord": discord_settings(),
-+        "tmdb": tmdb_settings(),
-     }
- 
- 
-@@ -515,12 +551,28 @@ def update_settings(data):
-     if "provider_fallback_order" in data:
-         _collect_provider_order(data["provider_fallback_order"], updates)
- 
-+    if "hls_concurrency" in data:
-+        raw = data["hls_concurrency"]
-+        if isinstance(raw, bool):
-+            raise SettingsError("hls_concurrency must be an integer")
-+        try:
-+            value = int(raw)
-+        except (TypeError, ValueError):
-+            raise SettingsError("hls_concurrency must be an integer") from None
-+        if str(raw).strip() != str(value) or not MIN_HLS_CONCURRENCY <= value <= MAX_HLS_CONCURRENCY:
-+            raise SettingsError(
-+                f"hls_concurrency must be between {MIN_HLS_CONCURRENCY} and {MAX_HLS_CONCURRENCY}"
-+            )
-+        updates["ANIWORLD_HLS_CONCURRENCY"] = str(value)
-+
-     _collect_autosync_schedule(data, updates)
-     _check_a_site_is_left(data)
- 
-     discord_changed = "discord" in data
-     if discord_changed:
-         _collect_discord(data["discord"], updates)
-+    if "tmdb" in data:
-+        _collect_tmdb(data["tmdb"], updates)
- 
-     # Persist first. If the disk is read-only/full, the API must not claim a
-     # successful save or leave a runtime-only change that vanishes on restart.
-@@ -560,6 +612,7 @@ def _env_sections():
-                     "ANIWORLD_PROVIDER_FALLBACK_ORDER",
-                     ",".join(get_provider_fallback_order(WORKING_PROVIDERS)),
-                 ),
-+                ("ANIWORLD_HLS_CONCURRENCY", str(hls_concurrency())),
-                 (
-                     "ANIWORLD_LANG_SEPARATION",
-                     _one_or_zero(paths.lang_separation_enabled()),
-@@ -626,7 +679,7 @@ def export_env():
-         "# or a starting point for a separately managed deployment configuration.",
-         "#",
-         "# Passwords and tokens are deliberately not in here: the Discord bot token,",
--        "# the OIDC client secret and any admin password stay where they are.",
-+        "# TMDB key, OIDC client secret and any admin password stay where they are.",
-     ]
-     for heading, entries in _env_sections():
-         lines.append("")
 diff --git a/src/aniworld/web/static/i18n.js b/src/aniworld/web/static/i18n.js
-index 61fb8fb..2993286 100644
+index 2993286..2194c08 100644
 --- a/src/aniworld/web/static/i18n.js
 +++ b/src/aniworld/web/static/i18n.js
-@@ -16,9 +16,23 @@
-       "nav.library": "Bibliothek",
-       "nav.queue": "Warteschlange",
-       "nav.autosync": "Auto-Sync",
-+      "nav.upcoming": "Demnächst",
-       "nav.settings": "Einstellungen",
+@@ -21,14 +21,35 @@
        "nav.logout": "Abmelden",
  
-+      "upcoming.title": "Demnächst erscheinende Filme",
-+      "upcoming.subtitle": "Unveröffentlichte Filme vormerken und nach einem eindeutigen Treffer einreihen.",
-+      "upcoming.check": "Jetzt prüfen",
-+      "upcoming.configure": "Trage zuerst unter Einstellungen → Integrationen deinen TMDB-Schlüssel ein.",
-+      "upcoming.open_settings": "Einstellungen öffnen",
-+      "upcoming.add": "Film hinzufügen",
-+      "upcoming.browse": "TMDB-Neuerscheinungen",
-+      "upcoming.watchlist": "Merkliste",
-+      "upcoming.next": "Nächste Prüfung",
-+      "upcoming.empty": "Noch keine Filme vorgemerkt.",
-+      "upcoming.added": "Hinzugefügt",
-+      "upcoming.started": "Prüfung gestartet",
-+
-       "common.save": "Speichern",
-       "common.add": "Hinzufügen",
-       "common.delete": "Löschen",
-@@ -77,6 +91,8 @@
-       "browse.load_more": "Mehr laden",
- 
-       "queue.title": "Download-Warteschlange",
-+      "queue.overall_progress": "Gesamtfortschritt",
-+      "queue.current_episode_progress": "Aktuelle Folge",
-       "queue.empty": "Die Warteschlange ist leer.",
-       "queue.no_matches": "Zu diesem Filter passt nichts.",
-       "queue.clear_finished": "Erledigte entfernen",
-@@ -147,6 +163,8 @@
-       "settings.preview_hint":
-         "Wo ein Download landet: der Pfad von oben und die aktuelle Namensvorlage zusammengesetzt. Filme nutzen von der Vorlage nur die Dateiendung.",
-       "settings.provider_fallback": "Anbieter-Reihenfolge",
-+      "settings.hls_concurrency": "Parallele HLS-Verbindungen",
-+      "settings.hls_concurrency_hint": "Standard: 8. Der Wert wird beim Start einer Folge festgeschrieben und gilt daher erst ab der nächsten Folge. Mit 1 wird der parallele HLS-Download deaktiviert.",
-       "settings.provider_fallback_hint":
-         "Zieh einen Anbieter, um ihn zu verschieben. Der ausgewählte Anbieter wird immer zuerst versucht. Schlägt er fehl, wird diese Reihenfolge durchlaufen.",
-       "settings.lang_separation": "Sprachen in eigene Ordner trennen",
-@@ -313,6 +331,8 @@
-       "settings.css_import_hint":
-         "Ein importiertes Theme wird vom Browser jedes Besuchers geladen. Der Host dahinter sieht also deren IP und kann das Theme jederzeit ändern. Importiere nur URLs, denen du vertraust.",
-       "settings.discord": "Discord-Anfrage-Bot",
-+      "settings.tmdb": "TMDB",
-+      "settings.tmdb_hint": "Wird für Filmdaten und die Demnächst-Merkliste verwendet. Der Schlüssel wird geheim gespeichert und nie zurückgegeben oder exportiert.",
-       "settings.discord.enable": "Discord-Bot aktivieren",
-       "settings.discord.enable_hint":
-         "Nutzer können Filme und Serien über Discord anfragen. Anfragen werden dir zur Freigabe geschickt.",
-diff --git a/src/aniworld/web/static/queue.js b/src/aniworld/web/static/queue.js
-index 568dc3e..1b3b930 100644
---- a/src/aniworld/web/static/queue.js
-+++ b/src/aniworld/web/static/queue.js
-@@ -65,6 +65,12 @@
-     return Math.min(100, Math.round(((done + partial) / count) * 100));
-   }
- 
-+  function episodePercent(item, progress) {
-+    if (item.status !== "running" || !progress.active) return 0;
-+    if (Number(progress.queue_id) !== Number(item.id)) return 0;
-+    return Math.max(0, Math.min(100, Math.round(progress.percent || 0)));
-+  }
-+
-   /* "bandwidth" is only populated when response bytes are measured directly.
-      FFmpeg's output-file growth is deliberately not labelled as network speed. */
-   function speedLabel(item, ffmpeg) {
-@@ -192,6 +198,7 @@
- 
-   function renderItem(item, ffmpeg) {
-     const percent = progressPercent(item, ffmpeg);
-+    const episode = episodePercent(item, ffmpeg);
-     const meta = metaLine(item);
- 
-     const captchaBtn =
-@@ -217,11 +224,17 @@
-             ${renderActions(item)}
-           </div>
-         </div>
--        <div class="progress-track"><div class="progress-fill" data-percent="${percent}" style="width:${percent}%"></div></div>
-+        <div class="progress-caption">${t("queue.overall_progress", "Overall progress")}</div>
-+        <div class="progress-track"><div class="progress-fill" data-progress="overall" data-percent="${percent}" style="width:${percent}%"></div></div>
-         <div class="progress-stats"${item.status === "running" ? "" : " hidden"}>
-           <span data-progress-percent>${percent}%</span>
-           <span data-progress-speed>${esc(speedLabel(item, ffmpeg))}</span>
-         </div>
-+        <div class="episode-progress"${item.status === "running" ? "" : " hidden"}>
-+          <div class="progress-caption">${t("queue.current_episode_progress", "Current episode")}</div>
-+          <div class="progress-track progress-track-episode"><div class="progress-fill progress-fill-episode" data-progress="episode" data-percent="${episode}" style="width:${episode}%"></div></div>
-+          <div class="progress-stats"><span data-episode-percent>${episode}%</span><span data-episode-time>${esc(ffmpeg.time || "")}</span></div>
-+        </div>
-         ${captchaBtn ? `<div class="action-row">${captchaBtn}</div>` : ""}
-         ${renderErrors(item)}
-       </div>`;
-@@ -247,8 +260,9 @@
-     ]);
-   }
- 
--  function setProgress(node, percent) {
--    const fill = node.querySelector(".progress-fill");
-+  function setProgress(node, percent, kind = "overall") {
-+    const fill = node.querySelector(`[data-progress="${kind}"]`);
-+    if (!fill) return;
-     const previous = Number(fill.dataset.percent);
-     // only animate forwards, a reset should land straight back at the start
-     fill.classList.toggle("no-transition", percent < previous);
-@@ -263,6 +277,10 @@
-     if (!percentNode) return;
-     percentNode.textContent = `${percent}%`;
-     node.querySelector("[data-progress-speed]").textContent = speedLabel(item, ffmpeg);
-+    const episodeNode = node.querySelector("[data-episode-percent]");
-+    if (episodeNode) episodeNode.textContent = `${episodePercent(item, ffmpeg)}%`;
-+    const episodeTime = node.querySelector("[data-episode-time]");
-+    if (episodeTime) episodeTime.textContent = ffmpeg.time || "";
-   }
- 
-   function paint(node, item, ffmpeg) {
-@@ -274,6 +292,7 @@
-     const percent = progressPercent(item, ffmpeg);
-     node.querySelector(".queue-item-meta").textContent = metaLine(item);
-     setProgress(node, percent);
-+    setProgress(node, episodePercent(item, ffmpeg), "episode");
-     setStats(node, item, ffmpeg, percent);
-     return node;
-   }
-@@ -373,7 +392,7 @@
-         return refresh();
-       }
- 
--      render(data.items || [], data.ffmpeg_progress || {});
-+      render(data.items || [], data.episode_progress || data.ffmpeg_progress || {});
-       paintControls(data.counts);
-       loaded = true;
-     } catch (error) {
-diff --git a/src/aniworld/web/static/settings.js b/src/aniworld/web/static/settings.js
-index a06b287..b66c832 100644
---- a/src/aniworld/web/static/settings.js
-+++ b/src/aniworld/web/static/settings.js
-@@ -98,6 +98,10 @@
-     el("downloadPath").value = settings.download_path || "";
-     el("uiLanguage").value = settings.ui_language;
-     el("outputFormat").value = settings.output_format;
-+    el("hlsConcurrency").value = settings.hls_concurrency || 8;
-+    el("hlsConcurrency").min = settings.hls_concurrency_min || 1;
-+    el("hlsConcurrency").max = settings.hls_concurrency_max || 32;
-+    el("tmdbApiKey").value = settings.tmdb && settings.tmdb.key_set ? SECRET_PLACEHOLDER : "";
- 
-     document.querySelectorAll("[data-setting]").forEach((box) => {
-       box.checked = Boolean(settings[box.dataset.setting]);
-@@ -129,6 +133,14 @@
-     save({ download_path: el("downloadPath").value.trim() });
-   });
- 
-+  el("saveHlsConcurrencyBtn").addEventListener("click", () => {
-+    save({ hls_concurrency: el("hlsConcurrency").value });
-+  });
-+
-+  el("saveTmdbBtn").addEventListener("click", () => {
-+    save({ tmdb: { api_key: el("tmdbApiKey").value } });
-+  });
-+
-   /* ===== Where a download lands =====
-      The path is put together on the server, by the same rules the downloader
-      follows, so this cannot drift from what actually happens. */
+       "upcoming.title": "Demnächst erscheinende Filme",
+-      "upcoming.subtitle": "Unveröffentlichte Filme vormerken und nach einem eindeutigen Treffer einreihen.",
++      "upcoming.subtitle": "Unveröffentlichte Filme vormerken. Einmal täglich werden die aktivierten Filmseiten geprüft und nur ein eindeutiger Titel-/Jahr-Treffer oder direkter TMDB-Treffer mit nutzbarem Anbieter eingereiht.",
+       "upcoming.check": "Jetzt prüfen",
++      "upcoming.how_title": "So funktioniert es",
++      "upcoming.mode_notice": "Nur eindeutige Treffer werden heruntergeladen. Mehrdeutige oder noch nicht verfügbare Filme bleiben auf der Merkliste.",
++      "upcoming.tmdb_required": "TMDB-Schlüssel erforderlich",
+       "upcoming.configure": "Trage zuerst unter Einstellungen → Integrationen deinen TMDB-Schlüssel ein.",
+       "upcoming.open_settings": "Einstellungen öffnen",
+       "upcoming.add": "Film hinzufügen",
++      "upcoming.add_hint": "Suche bei TMDB nach einem Titel oder zeige kommende deutsche Kinostarts an.",
++      "upcoming.movie_title": "Filmtitel",
+       "upcoming.browse": "TMDB-Neuerscheinungen",
+       "upcoming.watchlist": "Merkliste",
+-      "upcoming.next": "Nächste Prüfung",
++      "upcoming.movie": "Film",
++      "upcoming.release": "Veröffentlichung",
++      "upcoming.status": "Status",
++      "upcoming.watched": "Vorgemerkte Filme",
++      "upcoming.configured": "Eingerichtet",
++      "upcoming.not_configured": "Nicht eingerichtet",
++      "upcoming.release_unknown": "Veröffentlichung unbekannt",
++      "upcoming.no_results": "Keine kommenden Filme gefunden.",
++      "upcoming.search_short": "Gib mindestens zwei Zeichen ein.",
++      "upcoming.pause": "Pausieren",
++      "upcoming.resume": "Fortsetzen",
++      "upcoming.state.waiting": "Wartet",
++      "upcoming.state.checking": "Wird geprüft",
++      "upcoming.state.queued": "Eingereiht",
++      "upcoming.state.downloaded": "Heruntergeladen",
++      "upcoming.state.paused": "Pausiert",
++      "upcoming.state.error": "Fehler",
+       "upcoming.empty": "Noch keine Filme vorgemerkt.",
+       "upcoming.added": "Hinzugefügt",
+       "upcoming.started": "Prüfung gestartet",
 diff --git a/src/aniworld/web/static/style.css b/src/aniworld/web/static/style.css
-index 2e7bbae..967b00a 100644
+index 967b00a..8c4f196 100644
 --- a/src/aniworld/web/static/style.css
 +++ b/src/aniworld/web/static/style.css
-@@ -1559,6 +1559,21 @@ body[data-site="htv"] {
-   margin-top: 10px;
- }
+@@ -1568,11 +1568,100 @@ body[data-site="htv"] {
+ .progress-track-episode { height: 4px; }
+ .progress-fill-episode { background: var(--success); }
  
-+.progress-caption {
-+  margin: 0.55rem 0 0.25rem;
-+  color: var(--text-muted);
-+  font-size: 0.72rem;
+-.upcoming-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 1rem; margin-top: 1rem; }
+-.upcoming-card { display: grid; grid-template-columns: 90px 1fr; gap: 1rem; padding: 1rem; border: 1px solid var(--border); border-radius: 12px; }
+-.upcoming-card img { width: 90px; border-radius: 8px; }
+-.upcoming-card h3 { margin: 0; }
+-.upcoming-row { display: flex; justify-content: space-between; align-items: center; gap: 1rem; padding: 0.9rem 0; border-bottom: 1px solid var(--border); }
++.upcoming-config-notice {
++  display: flex;
++  align-items: center;
++  justify-content: space-between;
++  gap: 16px;
 +}
 +
-+.progress-track-episode { height: 4px; }
-+.progress-fill-episode { background: var(--success); }
++.upcoming-config-notice[hidden] {
++  display: none;
++}
 +
-+.upcoming-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 1rem; margin-top: 1rem; }
-+.upcoming-card { display: grid; grid-template-columns: 90px 1fr; gap: 1rem; padding: 1rem; border: 1px solid var(--border); border-radius: 12px; }
-+.upcoming-card img { width: 90px; border-radius: 8px; }
-+.upcoming-card h3 { margin: 0; }
-+.upcoming-row { display: flex; justify-content: space-between; align-items: center; gap: 1rem; padding: 0.9rem 0; border-bottom: 1px solid var(--border); }
++.upcoming-config-notice strong {
++  display: block;
++  color: var(--text-strong);
++  margin-bottom: 3px;
++}
 +
++.upcoming-search-row {
++  align-items: flex-end;
++}
++
++.upcoming-search-row .field {
++  min-width: 260px;
++}
++
++.upcoming-results {
++  display: flex;
++  flex-wrap: wrap;
++  gap: 16px;
++  margin-top: 20px;
++}
++
++.upcoming-results[hidden] {
++  display: none;
++}
++
++.upcoming-result-card {
++  width: 154px;
++  cursor: default;
++}
++
++.upcoming-result-card img,
++.upcoming-poster-placeholder {
++  width: 100%;
++  height: 228px;
++}
++
++.upcoming-poster-placeholder {
++  display: grid;
++  place-items: center;
++  background: var(--surface-poster);
++  color: var(--text-muted);
++  font-size: 2rem;
++}
++
++.upcoming-add-btn {
++  width: 100%;
++  margin-top: 10px;
++}
++
++.upcoming-row-message {
++  max-width: 330px;
++  overflow: hidden;
++  text-overflow: ellipsis;
++  white-space: nowrap;
++}
++
++.upcoming-actions {
++  text-align: right;
++  white-space: nowrap;
++}
++
++.upcoming-actions .btn + .btn {
++  margin-left: 6px;
++}
++
++@media (max-width: 640px) {
++  .upcoming-config-notice {
++    align-items: stretch;
++    flex-direction: column;
++  }
++
++  .upcoming-search-row > .btn {
++    flex: 1;
++  }
++
++  .upcoming-results {
++    justify-content: center;
++  }
++
++  .upcoming-actions {
++    white-space: normal;
++  }
++}
+ 
  /* The width is set once per poll. Animating for exactly that long means the
     bar is always still moving when the next value lands, instead of jumping
-    and then standing still. queue.js sets the duration from its interval. */
 diff --git a/src/aniworld/web/static/upcoming.js b/src/aniworld/web/static/upcoming.js
-new file mode 100644
-index 0000000..7d695aa
---- /dev/null
+index 7d695aa..9eacafe 100644
+--- a/src/aniworld/web/static/upcoming.js
 +++ b/src/aniworld/web/static/upcoming.js
-@@ -0,0 +1,34 @@
-+(function () {
-+  const el = (id) => document.getElementById(id);
-+  const poster = (path) =>
-+    typeof path === "string" && /^\/[A-Za-z0-9._/-]+$/.test(path)
-+      ? `https://image.tmdb.org/t/p/w342${path}`
-+      : "";
+@@ -1,34 +1,181 @@
++/* Upcoming page: TMDB search, explicit watchlist and daily-check status. */
 +
-+  function movieCard(movie) {
-+    const posterUrl = poster(movie.poster_path);
-+    return `<article class="upcoming-card">${posterUrl ? `<img src="${posterUrl}" alt="" loading="lazy">` : ""}<div><h3>${esc(movie.title)}</h3><p class="hint">${esc(movie.release_date || "")}</p><p>${esc((movie.overview || "").slice(0, 220))}</p><button class="btn btn-primary" data-add="${movie.tmdb_id}">${t("common.add", "Add")}</button></div></article>`;
+ (function () {
+   const el = (id) => document.getElementById(id);
+-  const poster = (path) =>
+-    typeof path === "string" && /^\/[A-Za-z0-9._/-]+$/.test(path)
++  const checkBtn = el("checkUpcomingBtn");
++  const searchBtn = el("searchUpcomingBtn");
++  const browseBtn = el("browseUpcomingBtn");
++  const searchInput = el("upcomingSearch");
++  const resultsBox = el("upcomingResults");
++  const listBody = el("upcomingList");
++
++  const STATUS_CLASS = {
++    waiting: "status-queued",
++    checking: "status-queued",
++    queued: "status-completed",
++    downloaded: "status-completed",
++    paused: "status-cancelled",
++    error: "status-failed"
++  };
++
++  const STATUS_LABELS = {
++    waiting: "Waiting",
++    checking: "Checking",
++    queued: "Queued",
++    downloaded: "Downloaded",
++    paused: "Paused",
++    error: "Error"
++  };
++
++  function statusLabel(status) {
++    return t(`upcoming.state.${status}`, STATUS_LABELS[status] || status);
 +  }
 +
-+  async function load() {
-+    const data = await apiFetch("/api/upcoming");
-+    el("tmdbMissing").hidden = data.configured;
-+    el("upcomingSchedule").textContent = data.next_run ? `${t("upcoming.next", "Next check")}: ${new Date(data.next_run).toLocaleString()}` : "";
-+    el("upcomingList").innerHTML = data.items.length ? data.items.map((movie) => {
++  function formatTime(value) {
++    if (!value) return "-";
++    const date = new Date(value);
++    return Number.isNaN(date.getTime()) ? "-" : date.toLocaleString();
++  }
++
++  function poster(path) {
++    return typeof path === "string" && /^\/[A-Za-z0-9._/-]+$/.test(path)
+       ? `https://image.tmdb.org/t/p/w342${path}`
+       : "";
++  }
+ 
+   function movieCard(movie) {
+     const posterUrl = poster(movie.poster_path);
+-    return `<article class="upcoming-card">${posterUrl ? `<img src="${posterUrl}" alt="" loading="lazy">` : ""}<div><h3>${esc(movie.title)}</h3><p class="hint">${esc(movie.release_date || "")}</p><p>${esc((movie.overview || "").slice(0, 220))}</p><button class="btn btn-primary" data-add="${movie.tmdb_id}">${t("common.add", "Add")}</button></div></article>`;
++    return `<article class="poster-card upcoming-result-card">
++      ${posterUrl ? `<img src="${posterUrl}" alt="" loading="lazy">` : `<div class="upcoming-poster-placeholder" aria-hidden="true">&#127916;</div>`}
++      <div class="info">
++        <div class="title" title="${esc(movie.title)}">${esc(movie.title)}</div>
++        <div class="subtitle">${esc(movie.release_date || t("upcoming.release_unknown", "Release unknown"))}</div>
++        <button class="btn btn-primary upcoming-add-btn" data-add="${Number(movie.tmdb_id)}">${t("common.add", "Add")}</button>
++      </div>
++    </article>`;
++  }
++
++  function renderResults(items) {
++    resultsBox.hidden = false;
++    resultsBox.innerHTML = items.length
++      ? items.map(movieCard).join("")
++      : `<div class="empty-state">${t("upcoming.no_results", "No upcoming movies found.")}</div>`;
++  }
++
++  function renderWatchlist(items) {
++    if (!items.length) {
++      listBody.innerHTML = `<tr class="empty-row"><td colspan="4">${t("upcoming.empty", "No movies are being watched.")}</td></tr>`;
++      return;
++    }
++
++    listBody.innerHTML = items.map((movie) => {
 +      const canToggle = ["waiting", "error", "paused"].includes(movie.status);
-+      const toggle = canToggle ? `<button class="btn btn-ghost" data-toggle="${movie.id}" data-status="${movie.status === "paused" ? "waiting" : "paused"}">${movie.status === "paused" ? "Resume" : "Pause"}</button>` : "";
-+      return `<div class="upcoming-row"><div><strong>${esc(movie.title)}</strong><div class="hint">${esc(movie.release_date)} · ${esc(movie.status)}${movie.last_message ? ` · ${esc(movie.last_message)}` : ""}</div></div><div class="action-row">${toggle}<button class="icon-btn" data-delete="${movie.id}" aria-label="Remove">×</button></div></div>`;
-+    }).join("") : `<div class="empty-state">${t("upcoming.empty", "No movies are being watched.")}</div>`;
++      const toggle = canToggle
++        ? `<button class="btn btn-ghost" data-toggle="${movie.id}" data-status="${movie.status === "paused" ? "waiting" : "paused"}">${movie.status === "paused" ? t("upcoming.resume", "Resume") : t("upcoming.pause", "Pause")}</button>`
++        : "";
++      const message = movie.last_message
++        ? `<div class="hint upcoming-row-message" title="${esc(movie.last_message)}">${esc(movie.last_message)}</div>`
++        : "";
++      return `<tr>
++        <td><strong>${esc(movie.title)}</strong>${message}</td>
++        <td>${esc(movie.release_date || "-")}</td>
++        <td><span class="status-pill ${STATUS_CLASS[movie.status] || "status-queued"}">${esc(statusLabel(movie.status))}</span></td>
++        <td class="upcoming-actions">${toggle}<button class="btn btn-danger" data-delete="${movie.id}">${t("common.remove", "Remove")}</button></td>
++      </tr>`;
++    }).join("");
+   }
+ 
+   async function load() {
+     const data = await apiFetch("/api/upcoming");
+-    el("tmdbMissing").hidden = data.configured;
+-    el("upcomingSchedule").textContent = data.next_run ? `${t("upcoming.next", "Next check")}: ${new Date(data.next_run).toLocaleString()}` : "";
+-    el("upcomingList").innerHTML = data.items.length ? data.items.map((movie) => {
+-      const canToggle = ["waiting", "error", "paused"].includes(movie.status);
+-      const toggle = canToggle ? `<button class="btn btn-ghost" data-toggle="${movie.id}" data-status="${movie.status === "paused" ? "waiting" : "paused"}">${movie.status === "paused" ? "Resume" : "Pause"}</button>` : "";
+-      return `<div class="upcoming-row"><div><strong>${esc(movie.title)}</strong><div class="hint">${esc(movie.release_date)} · ${esc(movie.status)}${movie.last_message ? ` · ${esc(movie.last_message)}` : ""}</div></div><div class="action-row">${toggle}<button class="icon-btn" data-delete="${movie.id}" aria-label="Remove">×</button></div></div>`;
+-    }).join("") : `<div class="empty-state">${t("upcoming.empty", "No movies are being watched.")}</div>`;
++    const configured = Boolean(data.configured);
++    el("tmdbMissing").hidden = configured;
++    el("upcomingTmdbState").textContent = configured
++      ? t("upcoming.configured", "Configured")
++      : t("upcoming.not_configured", "Not configured");
++    el("upcomingCount").textContent = String((data.items || []).length);
++    el("upcomingLastRun").textContent = formatTime(data.last_run);
++    el("upcomingNextRun").textContent = formatTime(data.next_run);
++    [checkBtn, searchBtn, browseBtn, searchInput].forEach((node) => {
++      node.disabled = !configured;
++    });
++    renderWatchlist(data.items || []);
 +  }
 +
-+  async function results(url) {
-+    try { const data = await apiFetch(url); el("upcomingResults").innerHTML = (data.items || []).map(movieCard).join(""); }
-+    catch (error) { showToast(error.message); }
-+  }
-+  el("searchUpcomingBtn").addEventListener("click", () => results(`/api/upcoming/tmdb/search?q=${encodeURIComponent(el("upcomingSearch").value.trim())}`));
-+  el("browseUpcomingBtn").addEventListener("click", () => results("/api/upcoming/tmdb/movies"));
-+  el("upcomingResults").addEventListener("click", async (event) => { const button = event.target.closest("[data-add]"); if (!button) return; try { await apiSend("/api/upcoming", "POST", {tmdb_id: Number(button.dataset.add)}); showToast(t("upcoming.added", "Added")); load(); } catch (error) { showToast(error.message); } });
-+  el("upcomingList").addEventListener("click", async (event) => { const toggle = event.target.closest("[data-toggle]"); const remove = event.target.closest("[data-delete]"); try { if (toggle) await apiSend(`/api/upcoming/${toggle.dataset.toggle}`, "PATCH", {status: toggle.dataset.status}); if (remove) await apiSend(`/api/upcoming/${remove.dataset.delete}`, "DELETE"); if (toggle || remove) load(); } catch (error) { showToast(error.message); } });
-+  el("checkUpcomingBtn").addEventListener("click", async () => { try { await apiSend("/api/upcoming/run", "POST"); showToast(t("upcoming.started", "Check started")); setTimeout(load, 1200); } catch (error) { showToast(error.message); } });
-+  load().catch((error) => showToast(error.message));
-+})();
-diff --git a/src/aniworld/web/templates/base.html b/src/aniworld/web/templates/base.html
-index 57ff4f9..4772fff 100644
---- a/src/aniworld/web/templates/base.html
-+++ b/src/aniworld/web/templates/base.html
-@@ -54,8 +54,13 @@
-       <a href="{{ url_for('pages.library') }}" class="top-bar-link" data-i18n="nav.library">Library</a>
-       {% endif %}
-       {% if autosync_enabled and (not auth_enabled or (current_user and current_user.role == 'admin')) %}
--      <a href="{{ url_for('pages.autosync') }}" class="top-bar-link has-ribbon">
-+      <a href="{{ url_for('pages.autosync') }}" class="top-bar-link">
-         <span data-i18n="nav.autosync">Auto-Sync</span>
-+      </a>
-+      {% endif %}
-+      {% if not auth_enabled or (current_user and current_user.role == 'admin') %}
-+      <a href="{{ url_for('pages.upcoming') }}" class="top-bar-link has-ribbon">
-+        <span data-i18n="nav.upcoming">Upcoming</span>
-         <span class="new-ribbon" aria-hidden="true">New</span>
-       </a>
-       {% endif %}
-diff --git a/src/aniworld/web/templates/settings.html b/src/aniworld/web/templates/settings.html
-index 578af0d..9f07e6a 100644
---- a/src/aniworld/web/templates/settings.html
-+++ b/src/aniworld/web/templates/settings.html
-@@ -94,6 +94,15 @@
-             through this order.
-           </p>
++  async function loadResults(url, button) {
++    button.disabled = true;
++    resultsBox.hidden = false;
++    resultsBox.innerHTML = `<div class="empty-state">${t("common.loading", "Loading...")}</div>`;
++    try {
++      const data = await apiFetch(url);
++      renderResults(data.items || []);
++    } catch (error) {
++      resultsBox.innerHTML = `<div class="empty-state">${esc(error.message)}</div>`;
++      showToast(error.message);
++    } finally {
++      button.disabled = false;
++    }
+   }
  
-+          <h3 data-i18n="settings.hls_concurrency">Parallel HLS connections</h3>
-+          <div class="inline-form">
-+            <input type="number" id="hlsConcurrency" min="1" max="32" step="1" inputmode="numeric" />
-+            <button class="btn btn-primary" id="saveHlsConcurrencyBtn" data-i18n="common.save">Save</button>
-+          </div>
-+          <p class="hint" data-i18n="settings.hls_concurrency_hint">
-+            Default: 8. The value is frozen when an episode starts and applies from the next episode only. Set 1 to disable parallel HLS downloading.
-+          </p>
+-  async function results(url) {
+-    try { const data = await apiFetch(url); el("upcomingResults").innerHTML = (data.items || []).map(movieCard).join(""); }
+-    catch (error) { showToast(error.message); }
++  function search() {
++    const query = searchInput.value.trim();
++    if (query.length < 2) {
++      showToast(t("upcoming.search_short", "Enter at least two characters."));
++      searchInput.focus();
++      return;
++    }
++    loadResults(`/api/upcoming/tmdb/search?q=${encodeURIComponent(query)}`, searchBtn);
+   }
+-  el("searchUpcomingBtn").addEventListener("click", () => results(`/api/upcoming/tmdb/search?q=${encodeURIComponent(el("upcomingSearch").value.trim())}`));
+-  el("browseUpcomingBtn").addEventListener("click", () => results("/api/upcoming/tmdb/movies"));
+-  el("upcomingResults").addEventListener("click", async (event) => { const button = event.target.closest("[data-add]"); if (!button) return; try { await apiSend("/api/upcoming", "POST", {tmdb_id: Number(button.dataset.add)}); showToast(t("upcoming.added", "Added")); load(); } catch (error) { showToast(error.message); } });
+-  el("upcomingList").addEventListener("click", async (event) => { const toggle = event.target.closest("[data-toggle]"); const remove = event.target.closest("[data-delete]"); try { if (toggle) await apiSend(`/api/upcoming/${toggle.dataset.toggle}`, "PATCH", {status: toggle.dataset.status}); if (remove) await apiSend(`/api/upcoming/${remove.dataset.delete}`, "DELETE"); if (toggle || remove) load(); } catch (error) { showToast(error.message); } });
+-  el("checkUpcomingBtn").addEventListener("click", async () => { try { await apiSend("/api/upcoming/run", "POST"); showToast(t("upcoming.started", "Check started")); setTimeout(load, 1200); } catch (error) { showToast(error.message); } });
 +
-           <h3 data-i18n="settings.output_format">Output Format</h3>
-           <div class="control-row">
-             <label class="field field-compact">
-@@ -682,6 +691,14 @@
- 
-       <section class="settings-pane" id="pane-integrations" role="tabpanel"
-         aria-labelledby="tab-integrations" tabindex="-1" hidden>
-+        <section class="card">
-+          <h2 data-i18n="settings.tmdb">TMDB</h2>
-+          <p class="hint" data-i18n="settings.tmdb_hint">Used for movie metadata and the Upcoming watchlist. The key is stored as a secret and is never returned or exported.</p>
-+          <div class="inline-form">
-+            <input type="password" id="tmdbApiKey" autocomplete="new-password" placeholder="TMDB API key or read token" />
-+            <button class="btn btn-primary" id="saveTmdbBtn" data-i18n="common.save">Save</button>
-+          </div>
-+        </section>
-         <section class="card">
-           <h2 data-i18n="settings.discord">Discord Request Bot</h2>
-           <label class="checkbox">
++  searchBtn.addEventListener("click", search);
++  searchInput.addEventListener("keydown", (event) => {
++    if (event.key === "Enter") search();
++  });
++  browseBtn.addEventListener("click", () => loadResults("/api/upcoming/tmdb/movies", browseBtn));
++
++  resultsBox.addEventListener("click", async (event) => {
++    const button = event.target.closest("[data-add]");
++    if (!button) return;
++    button.disabled = true;
++    try {
++      await apiSend("/api/upcoming", "POST", { tmdb_id: Number(button.dataset.add) });
++      showToast(t("upcoming.added", "Added"));
++      await load();
++      button.textContent = t("upcoming.added", "Added");
++    } catch (error) {
++      showToast(error.message);
++      button.disabled = false;
++    }
++  });
++
++  listBody.addEventListener("click", async (event) => {
++    const toggle = event.target.closest("[data-toggle]");
++    const remove = event.target.closest("[data-delete]");
++    try {
++      if (toggle) {
++        await apiSend(`/api/upcoming/${toggle.dataset.toggle}`, "PATCH", { status: toggle.dataset.status });
++      } else if (remove) {
++        await apiSend(`/api/upcoming/${remove.dataset.delete}`, "DELETE");
++      } else {
++        return;
++      }
++      await load();
++    } catch (error) {
++      showToast(error.message);
++    }
++  });
++
++  checkBtn.addEventListener("click", async () => {
++    checkBtn.disabled = true;
++    try {
++      await apiSend("/api/upcoming/run", "POST");
++      showToast(t("upcoming.started", "Check started"));
++      setTimeout(() => load().catch(() => {}), 1200);
++    } catch (error) {
++      showToast(error.message);
++    } finally {
++      checkBtn.disabled = false;
++    }
++  });
++
+   load().catch((error) => showToast(error.message));
+ })();
 diff --git a/src/aniworld/web/templates/upcoming.html b/src/aniworld/web/templates/upcoming.html
-new file mode 100644
-index 0000000..a0b658e
---- /dev/null
+index a0b658e..6e19d7a 100644
+--- a/src/aniworld/web/templates/upcoming.html
 +++ b/src/aniworld/web/templates/upcoming.html
-@@ -0,0 +1,13 @@
-+{% extends "base.html" %}
-+{% block title %}Upcoming - AniWorld Downloader{% endblock %}
-+{% block content %}
-+<div class="page-header"><div><h1 data-i18n="upcoming.title">Upcoming movies</h1><p class="subtitle" data-i18n="upcoming.subtitle">Track unreleased movies and queue them after an exact match is found.</p></div><button class="btn btn-secondary" id="checkUpcomingBtn" data-i18n="upcoming.check">Check now</button></div>
-+<section class="card" id="tmdbMissing" hidden><p data-i18n="upcoming.configure">Add your TMDB key under Settings → Integrations first.</p><a class="btn btn-primary" href="{{ url_for('pages.settings') }}#integrations" data-i18n="upcoming.open_settings">Open settings</a></section>
-+<section class="card">
-+  <h2 data-i18n="upcoming.add">Add movie</h2>
-+  <div class="inline-form"><input id="upcomingSearch" type="search" placeholder="Movie title"/><button class="btn btn-primary" id="searchUpcomingBtn" data-i18n="index.search">Search</button><button class="btn btn-secondary" id="browseUpcomingBtn" data-i18n="upcoming.browse">TMDB upcoming</button></div>
-+  <div id="upcomingResults" class="upcoming-grid"></div>
-+</section>
-+<section class="card"><div class="section-head"><h2 data-i18n="upcoming.watchlist">Watchlist</h2><span class="hint" id="upcomingSchedule"></span></div><div id="upcomingList"></div></section>
+@@ -1,13 +1,77 @@
+ {% extends "base.html" %}
++
+ {% block title %}Upcoming - AniWorld Downloader{% endblock %}
++
+ {% block content %}
+-<div class="page-header"><div><h1 data-i18n="upcoming.title">Upcoming movies</h1><p class="subtitle" data-i18n="upcoming.subtitle">Track unreleased movies and queue them after an exact match is found.</p></div><button class="btn btn-secondary" id="checkUpcomingBtn" data-i18n="upcoming.check">Check now</button></div>
+-<section class="card" id="tmdbMissing" hidden><p data-i18n="upcoming.configure">Add your TMDB key under Settings → Integrations first.</p><a class="btn btn-primary" href="{{ url_for('pages.settings') }}#integrations" data-i18n="upcoming.open_settings">Open settings</a></section>
+-<section class="card">
+-  <h2 data-i18n="upcoming.add">Add movie</h2>
+-  <div class="inline-form"><input id="upcomingSearch" type="search" placeholder="Movie title"/><button class="btn btn-primary" id="searchUpcomingBtn" data-i18n="index.search">Search</button><button class="btn btn-secondary" id="browseUpcomingBtn" data-i18n="upcoming.browse">TMDB upcoming</button></div>
+-  <div id="upcomingResults" class="upcoming-grid"></div>
+-</section>
+-<section class="card"><div class="section-head"><h2 data-i18n="upcoming.watchlist">Watchlist</h2><span class="hint" id="upcomingSchedule"></span></div><div id="upcomingList"></div></section>
++<div class="container container-narrow">
++  <div class="page-head">
++    <h1 data-i18n="upcoming.title">Upcoming movies</h1>
++    <button class="btn btn-primary" id="checkUpcomingBtn" data-i18n="upcoming.check" disabled>Check now</button>
++  </div>
++
++  <section class="card">
++    <h2 data-i18n="upcoming.how_title">How it works</h2>
++    <p class="hint" data-i18n="upcoming.subtitle">
++      Track unreleased movies. Once a day, enabled movie sites are checked and a download is queued only after an exact
++      title and release-year match, or a direct TMDB match, has a usable provider.
++    </p>
++    <div class="notice" id="upcomingModeNotice" data-i18n="upcoming.mode_notice">
++      Only exact matches are downloaded. Ambiguous or unavailable movies remain on the watchlist.
++    </div>
++    <div class="notice upcoming-config-notice" id="tmdbMissing" hidden>
++      <div>
++        <strong data-i18n="upcoming.tmdb_required">TMDB key required</strong>
++        <div data-i18n="upcoming.configure">Add your TMDB key under Settings → Integrations first.</div>
++      </div>
++      <a class="btn btn-primary" href="{{ url_for('pages.settings') }}#integrations"
++        data-i18n="upcoming.open_settings">Open settings</a>
++    </div>
++  </section>
++
++  <section class="card">
++    <h2 data-i18n="upcoming.add">Add movie</h2>
++    <p class="hint" data-i18n="upcoming.add_hint">
++      Search TMDB by title or browse upcoming theatrical releases in Germany.
++    </p>
++    <div class="control-row upcoming-search-row">
++      <label class="field">
++        <span class="field-label" data-i18n="upcoming.movie_title">Movie title</span>
++        <input id="upcomingSearch" type="search" autocomplete="off" disabled
++          data-i18n-placeholder="upcoming.movie_title" placeholder="Movie title" />
++      </label>
++      <button class="btn btn-primary" id="searchUpcomingBtn" data-i18n="index.search" disabled>Search</button>
++      <button class="btn btn-secondary" id="browseUpcomingBtn" data-i18n="upcoming.browse" disabled>TMDB upcoming</button>
++    </div>
++    <div id="upcomingResults" class="upcoming-results" hidden></div>
++  </section>
++
++  <section class="card">
++    <h2 data-i18n="upcoming.watchlist">Watchlist</h2>
++    <table class="data-table stacked-table">
++      <thead>
++        <tr>
++          <th data-i18n="upcoming.movie">Movie</th>
++          <th data-i18n="upcoming.release">Release</th>
++          <th data-i18n="upcoming.status">Status</th>
++          <th></th>
++        </tr>
++      </thead>
++      <tbody id="upcomingList"></tbody>
++    </table>
++  </section>
++
++  <section class="card">
++    <h2 data-i18n="upcoming.status">Status</h2>
++    <div class="sync-stats">
++      <div><div class="ip-label">TMDB</div><div class="sync-value" id="upcomingTmdbState">-</div></div>
++      <div><div class="ip-label" data-i18n="upcoming.watched">Watched movies</div><div class="sync-value" id="upcomingCount">0</div></div>
++      <div><div class="ip-label" data-i18n="autosync.last_run">Last run</div><div class="sync-value" id="upcomingLastRun">-</div></div>
++      <div><div class="ip-label" data-i18n="autosync.next_run">Next run</div><div class="sync-value" id="upcomingNextRun">-</div></div>
++    </div>
++  </section>
++</div>
 +{% endblock %}
-+{% block scripts %}<script src="{{ url_for('static', filename='upcoming.js') }}?v={{ app_version }}"></script>{% endblock %}
-diff --git a/src/aniworld/web/tmdb.py b/src/aniworld/web/tmdb.py
-new file mode 100644
-index 0000000..db488e0
---- /dev/null
-+++ b/src/aniworld/web/tmdb.py
-@@ -0,0 +1,82 @@
-+"""Small, fixed-origin TMDB client. Credentials never leave this module."""
 +
-+import os
-+from datetime import UTC, datetime
-+
-+import niquests as requests
-+
-+from .settings_store import TMDB_KEY
-+
-+BASE_URL = "https://api.themoviedb.org/3"
-+
-+
-+class TMDBError(RuntimeError):
-+    pass
-+
-+
-+def configured():
-+    return bool(os.environ.get(TMDB_KEY, "").strip())
-+
-+
-+def _get(path, **params):
-+    token = os.environ.get(TMDB_KEY, "").strip()
-+    if not token:
-+        raise TMDBError("TMDB is not configured")
-+    headers = {"Accept": "application/json", "User-Agent": "AniWorld Downloader"}
-+    if token.startswith("eyJ") or len(token) > 64:
-+        headers["Authorization"] = f"Bearer {token}"
-+    else:
-+        params["api_key"] = token
-+    try:
-+        response = requests.get(
-+            f"{BASE_URL}/{path.lstrip('/')}",
-+            params=params,
-+            headers=headers,
-+            timeout=15,
-+        )
-+    except Exception as exc:
-+        raise TMDBError("TMDB request failed") from exc
-+    if response.status_code in (401, 403):
-+        raise TMDBError("TMDB rejected the configured key")
-+    if not 200 <= response.status_code < 300:
-+        raise TMDBError(f"TMDB request failed ({response.status_code})")
-+    try:
-+        return response.json()
-+    except ValueError as exc:
-+        raise TMDBError("TMDB returned an invalid response") from exc
-+
-+
-+def _movie(item):
-+    release = item.get("release_date") or ""
-+    return {
-+        "tmdb_id": int(item["id"]),
-+        "title": item.get("title") or item.get("original_title") or "Unknown",
-+        "original_title": item.get("original_title") or "",
-+        "release_date": release,
-+        "release_year": int(release[:4])
-+        if len(release) >= 4 and release[:4].isdigit()
-+        else 0,
-+        "poster_path": item.get("poster_path"),
-+        "overview": item.get("overview") or "",
-+    }
-+
-+
-+def search_movies(query, language="de-DE"):
-+    data = _get("search/movie", query=query, language=language, include_adult="false")
-+    return [_movie(item) for item in data.get("results", []) if item.get("id")]
-+
-+
-+def upcoming_movies(language="de-DE"):
-+    data = _get("movie/upcoming", language=language, region="DE")
-+    today = datetime.now(UTC).date().isoformat()
-+    return [
-+        _movie(item)
-+        for item in data.get("results", [])
-+        if (item.get("release_date") or "") >= today
-+    ]
-+
-+
-+def movie_details(tmdb_id, language="de-DE"):
-+    if not isinstance(tmdb_id, int) or tmdb_id <= 0:
-+        raise TMDBError("Invalid TMDB movie id")
-+    return _movie(_get(f"movie/{tmdb_id}", language=language))
-diff --git a/src/aniworld/web/upcoming.py b/src/aniworld/web/upcoming.py
-new file mode 100644
-index 0000000..7ac1858
---- /dev/null
-+++ b/src/aniworld/web/upcoming.py
-@@ -0,0 +1,179 @@
-+"""Daily Upcoming watchlist checker with deliberately strict title matching."""
-+
-+import re
-+import threading
-+import time
-+import unicodedata
-+from datetime import UTC, datetime, timedelta
-+
-+from ..logger import get_logger
-+from . import db, media, settings_store, sitesearch, tmdb
-+from .media import WORKING_PROVIDERS
-+
-+logger = get_logger(__name__)
-+_started = False
-+_start_lock = threading.Lock()
-+_run_lock = threading.Lock()
-+
-+
-+def _normalise(value):
-+    value = unicodedata.normalize("NFKD", value or "").casefold()
-+    return re.sub(r"[^a-z0-9]+", "", value)
-+
-+
-+def _exact_hit(movie):
-+    titles = list(
-+        dict.fromkeys(filter(None, (movie["title"], movie.get("original_title", ""))))
-+    )
-+    aliases = {_normalise(value) for value in titles} - {""}
-+    candidates = []
-+    for site in sitesearch.MOVIE_SITES:
-+        if not settings_store.site_enabled(site):
-+            continue
-+        for readable in titles:
-+            for hit in sitesearch.search(site, readable):
-+                # Cineby movie URLs carry the authoritative TMDB id.
-+                if site == "cineby" and re.search(
-+                    rf"/movie/{movie['tmdb_id']}(?:[/?#]|$)", hit["url"]
-+                ):
-+                    return hit
-+                if _normalise(hit.get("title")) in aliases:
-+                    try:
-+                        from ..providers import resolve_provider
-+
-+                        found = resolve_provider(hit["url"]).series_cls(url=hit["url"])
-+                        year = str(getattr(found, "release_year", ""))[:4]
-+                    except Exception:
-+                        year = ""
-+                    if year != str(movie["release_year"]):
-+                        continue
-+                    candidates.append(hit)
-+    # Every candidate reaching this point has the exact title and year. Prefer
-+    # the first enabled site instead of stalling forever when several sites
-+    # carry the same confirmed movie.
-+    unique = {hit["url"]: hit for hit in candidates}
-+    return next(iter(unique.values()), None)
-+
-+
-+def _usable_provider(url, language, preferred):
-+    from ..providers import resolve_provider
-+
-+    resolved = resolve_provider(url)
-+    episode = resolved.episode_cls(url=url, selected_language=language)
-+    if resolved.name == "Cineby":
-+        available = (
-+            ["Cineby"]
-+            if language in getattr(episode, "available_language_labels", ())
-+            else []
-+        )
-+    else:
-+        available = media.provider_map(episode.provider_data).get(language, [])
-+    if preferred in available:
-+        return preferred
-+    return available[0] if available else None
-+
-+
-+def run_cycle():
-+    if not tmdb.configured() or not _run_lock.acquire(blocking=False):
-+        return False
-+    try:
-+        now = datetime.now(UTC).replace(microsecond=0).isoformat()
-+        for movie in db.list_upcoming_movies():
-+            if movie["status"] in ("paused", "queued", "downloaded"):
-+                continue
-+            if movie["release_date"] > datetime.now(UTC).date().isoformat():
-+                continue
-+            try:
-+                hit = _exact_hit(movie)
-+                if not hit:
-+                    db.update_upcoming_movie(
-+                        movie["id"],
-+                        status="waiting",
-+                        last_checked_at=now,
-+                        last_message="No unique exact match yet",
-+                    )
-+                    continue
-+                preferred = (
-+                    movie["provider"]
-+                    if movie["provider"] in WORKING_PROVIDERS
-+                    else WORKING_PROVIDERS[0]
-+                )
-+                provider = _usable_provider(hit["url"], movie["language"], preferred)
-+                if not provider:
-+                    db.update_upcoming_movie(
-+                        movie["id"],
-+                        status="waiting",
-+                        last_checked_at=now,
-+                        last_message="Exact title found, but no usable provider for the language",
-+                    )
-+                    continue
-+                queue_id = db.add_to_queue(
-+                    movie["title"],
-+                    hit["url"],
-+                    [hit["url"]],
-+                    movie["language"],
-+                    provider,
-+                    custom_path_id=movie["custom_path_id"],
-+                    source="upcoming",
-+                )
-+                db.update_upcoming_movie(
-+                    movie["id"],
-+                    status="queued",
-+                    matched_url=hit["url"],
-+                    queue_id=queue_id,
-+                    last_checked_at=now,
-+                    last_message="Unique exact match queued",
-+                )
-+            except Exception as exc:
-+                logger.warning(
-+                    "Upcoming check failed for movie %s: %s", movie["id"], exc
-+                )
-+                db.update_upcoming_movie(
-+                    movie["id"],
-+                    status="error",
-+                    last_checked_at=now,
-+                    last_message=str(exc)[:500],
-+                )
-+        db.upcoming_state_set("last_run", now)
-+        db.upcoming_state_set(
-+            "next_run",
-+            (datetime.now(UTC) + timedelta(days=1)).replace(microsecond=0).isoformat(),
-+        )
-+        return True
-+    finally:
-+        _run_lock.release()
-+
-+
-+def run_async():
-+    threading.Thread(
-+        target=run_cycle, name="aniworld-upcoming-manual", daemon=True
-+    ).start()
-+
-+
-+def ensure_started():
-+    global _started
-+    with _start_lock:
-+        if _started:
-+            return
-+        _started = True
-+
-+    def loop():
-+        while True:
-+            try:
-+                last = db.upcoming_state_get("last_run")
-+                due = True
-+                if last:
-+                    try:
-+                        parsed = datetime.fromisoformat(last)
-+                        if parsed.tzinfo is None:
-+                            parsed = parsed.replace(tzinfo=UTC)
-+                        due = datetime.now(UTC) - parsed >= timedelta(days=1)
-+                    except (TypeError, ValueError):
-+                        pass
-+                if due:
-+                    run_cycle()
-+            except Exception:
-+                logger.exception("Upcoming scheduler cycle failed")
-+            time.sleep(300)
-+
-+    threading.Thread(target=loop, name="aniworld-upcoming", daemon=True).start()
-diff --git a/src/aniworld/web/views/__init__.py b/src/aniworld/web/views/__init__.py
-index 0460b2d..506217a 100644
---- a/src/aniworld/web/views/__init__.py
-+++ b/src/aniworld/web/views/__init__.py
-@@ -13,6 +13,7 @@ from . import (
-     api_media,
-     api_queue,
-     api_settings,
-+    api_upcoming,
-     pages,
- )
- 
-@@ -35,6 +36,14 @@ ADMIN_ENDPOINTS = {
-     "api.delete_custom_path",
-     "api.delete_library_item",
-     "pages.autosync",
-+    "pages.upcoming",
-+    "api.upcoming_list",
-+    "api.upcoming_add",
-+    "api.upcoming_update",
-+    "api.upcoming_delete",
-+    "api.upcoming_search",
-+    "api.upcoming_browse",
-+    "api.upcoming_run",
-     "api.autosync_status",
-     "api.autosync_run",
-     "api.list_series",
-@@ -64,6 +73,7 @@ def register_blueprints(app):
-         api_library,
-         api_autosync,
-         api_keys,
-+        api_upcoming,
-     ):
-         module.register(api)
-     app.register_blueprint(api)
-diff --git a/src/aniworld/web/views/api_queue.py b/src/aniworld/web/views/api_queue.py
-index 0bc230e..475566d 100644
---- a/src/aniworld/web/views/api_queue.py
-+++ b/src/aniworld/web/views/api_queue.py
-@@ -104,9 +104,11 @@ def list_queue():
-     from ...models.common.common import get_ffmpeg_progress
- 
-     args = request.args
-+    progress = get_ffmpeg_progress()
-     if not any(arg in args for arg in _PAGE_ARGS):
-         return jsonify(
--            {"items": db.get_queue(), "ffmpeg_progress": get_ffmpeg_progress()}
-+            {"items": db.get_queue(), "ffmpeg_progress": progress,
-+             "episode_progress": progress}
-         )
- 
-     status = args.get("status") or None
-@@ -141,7 +143,8 @@ def list_queue():
-             "limit": limit,
-             "offset": offset,
-             "counts": db.queue_counts(),
--            "ffmpeg_progress": get_ffmpeg_progress(),
-+            "ffmpeg_progress": progress,
-+            "episode_progress": progress,
-         }
-     )
- 
-diff --git a/src/aniworld/web/views/api_upcoming.py b/src/aniworld/web/views/api_upcoming.py
-new file mode 100644
-index 0000000..6279d8a
---- /dev/null
-+++ b/src/aniworld/web/views/api_upcoming.py
-@@ -0,0 +1,119 @@
-+"""Upcoming watchlist JSON endpoints."""
-+
-+from datetime import UTC, datetime
-+from sqlite3 import IntegrityError
-+
-+from flask import jsonify, request
-+
-+from ...config import LANG_LABELS
-+from .. import db, tmdb, upcoming
-+from ..media import WORKING_PROVIDERS
-+
-+
-+def _int(value, name):
-+    if isinstance(value, bool):
-+        raise TypeError(f"{name} must be an integer")
-+    return int(value)
-+
-+
-+def register(api):
-+    api.add_url_rule("/upcoming", view_func=upcoming_list, methods=["GET"])
-+    api.add_url_rule("/upcoming", view_func=upcoming_add, methods=["POST"])
-+    api.add_url_rule(
-+        "/upcoming/<int:movie_id>", view_func=upcoming_update, methods=["PATCH"]
-+    )
-+    api.add_url_rule(
-+        "/upcoming/<int:movie_id>", view_func=upcoming_delete, methods=["DELETE"]
-+    )
-+    api.add_url_rule(
-+        "/upcoming/tmdb/search", view_func=upcoming_search, methods=["GET"]
-+    )
-+    api.add_url_rule(
-+        "/upcoming/tmdb/movies", view_func=upcoming_browse, methods=["GET"]
-+    )
-+    api.add_url_rule("/upcoming/run", view_func=upcoming_run, methods=["POST"])
-+
-+
-+def upcoming_list():
-+    return jsonify(
-+        {
-+            "configured": tmdb.configured(),
-+            "items": db.list_upcoming_movies(),
-+            "last_run": db.upcoming_state_get("last_run"),
-+            "next_run": db.upcoming_state_get("next_run"),
-+        }
-+    )
-+
-+
-+def upcoming_search():
-+    query = request.args.get("q", "").strip()
-+    if len(query) < 2:
-+        return jsonify({"error": "Search query is too short"}), 400
-+    try:
-+        return jsonify({"items": tmdb.search_movies(query)})
-+    except Exception as exc:
-+        return jsonify({"error": str(exc)}), 502
-+
-+
-+def upcoming_browse():
-+    try:
-+        return jsonify({"items": tmdb.upcoming_movies()})
-+    except Exception as exc:
-+        return jsonify({"error": str(exc)}), 502
-+
-+
-+def upcoming_add():
-+    data = request.get_json(silent=True) or {}
-+    try:
-+        movie = tmdb.movie_details(_int(data.get("tmdb_id"), "tmdb_id"))
-+        if (
-+            not movie["release_date"]
-+            or movie["release_date"] <= datetime.now(UTC).date().isoformat()
-+        ):
-+            return jsonify({"error": "Only unreleased movies can be added"}), 400
-+        language = str(data.get("language") or "German Dub")
-+        provider = str(data.get("provider") or "VOE")
-+        if language not in LANG_LABELS.values():
-+            raise ValueError("Invalid language")
-+        if provider not in WORKING_PROVIDERS:
-+            raise ValueError("Invalid provider")
-+        custom_path_id = data.get("custom_path_id")
-+        if custom_path_id is not None:
-+            custom_path_id = _int(custom_path_id, "custom_path_id")
-+            if not db.get_custom_path(custom_path_id):
-+                raise ValueError("Invalid custom_path_id")
-+        movie_id = db.add_upcoming_movie(movie, language, provider, custom_path_id)
-+        return jsonify({"id": movie_id}), 201
-+    except IntegrityError:
-+        return jsonify({"error": "This movie is already on the list"}), 409
-+    except (ValueError, TypeError) as exc:
-+        return jsonify({"error": str(exc)}), 400
-+    except Exception as exc:
-+        return jsonify({"error": str(exc)}), 502
-+
-+
-+def upcoming_update(movie_id):
-+    movie = db.get_upcoming_movie(movie_id)
-+    if not movie:
-+        return jsonify({"error": "Not found"}), 404
-+    data = request.get_json(silent=True) or {}
-+    status = data.get("status")
-+    if status not in ("waiting", "paused"):
-+        return jsonify({"error": "status must be waiting or paused"}), 400
-+    current = movie["status"]
-+    if status == "paused" and current not in ("waiting", "error"):
-+        return jsonify({"error": "Only waiting movies can be paused"}), 409
-+    if status == "waiting" and current != "paused":
-+        return jsonify({"error": "Only paused movies can be resumed"}), 409
-+    db.update_upcoming_movie(movie_id, status=status)
-+    return jsonify({"ok": True})
-+
-+
-+def upcoming_delete(movie_id):
-+    db.delete_upcoming_movie(movie_id)
-+    return "", 204
-+
-+
-+def upcoming_run():
-+    upcoming.run_async()
-+    return jsonify({"started": True}), 202
-diff --git a/src/aniworld/web/views/pages.py b/src/aniworld/web/views/pages.py
-index 0c5d25c..83e25f6 100644
---- a/src/aniworld/web/views/pages.py
-+++ b/src/aniworld/web/views/pages.py
-@@ -94,3 +94,8 @@ def autosync():
- @bp.route("/settings")
- def settings():
-     return render_template("settings.html")
-+
-+
-+@bp.route("/upcoming")
-+def upcoming():
-+    return render_template("upcoming.html", providers=WORKING_PROVIDERS)
-diff --git a/src/aniworld/web/worker.py b/src/aniworld/web/worker.py
-index 13eb208..17ad46e 100644
---- a/src/aniworld/web/worker.py
-+++ b/src/aniworld/web/worker.py
-@@ -10,7 +10,7 @@ import time
- 
- from ..logger import get_logger
- from ..providers import resolve_provider
--from . import db, paths
-+from . import db, paths, settings_store
- from .media import mangafire_format
- 
- logger = get_logger(__name__)
-@@ -139,12 +139,18 @@ def _process(item):
-         try:
-             db.update_queue_progress(queue_id, index, url)
-             provider, episode = _build_episode(url, extra, item, selected_path)
-+            from ..models.common.common import (
-+                clear_episode_download_context,
-+                set_episode_download_context,
-+            )
-+            set_episode_download_context(queue_id, index, settings_store.hls_concurrency())
-             # Tells the captcha module to stream its browser into this queue item
-             captcha._local.queue_id = queue_id
-             try:
-                 episode.download()
-             finally:
-                 captcha._local.queue_id = None
-+                clear_episode_download_context()
-         except Exception as exc:
-             captcha._local.queue_id = None
-             # A force cancel kills the download on purpose. Whatever it raised
-@@ -175,6 +181,8 @@ def _process(item):
-             db.set_queue_status(
-                 queue_id, "completed" if everything_done else "cancelled"
-             )
-+            if item.get("source") == "upcoming":
-+                db.finish_upcoming_queue(queue_id, "completed" if everything_done else "cancelled")
-             if everything_done and item.get("source") == "discord":
-                 _notify_discord(item)
-             return
-@@ -183,6 +191,9 @@ def _process(item):
-     status = "failed" if errors and len(errors) == len(entries) else "completed"
-     db.set_queue_status(queue_id, status)
- 
-+    if item.get("source") == "upcoming":
-+        db.finish_upcoming_queue(queue_id, status)
-+
-     if status == "completed" and item.get("source") == "discord":
-         _notify_discord(item)
- 
-diff --git a/tests/test_settings_store.py b/tests/test_settings_store.py
-index f3b2483..779c0a6 100644
---- a/tests/test_settings_store.py
-+++ b/tests/test_settings_store.py
-@@ -41,6 +41,24 @@ def test_read_settings_never_leaks_the_discord_token(monkeypatch):
-     assert "super-secret-token" not in str(discord)
- 
- 
-+def test_hls_concurrency_defaults_validates_and_round_trips():
-+    assert settings_store.read_settings()["hls_concurrency"] == 8
-+    update_settings({"hls_concurrency": "10"})
-+    assert settings_store.hls_concurrency() == 10
-+    with pytest.raises(SettingsError):
-+        update_settings({"hls_concurrency": 0})
-+    with pytest.raises(SettingsError):
-+        update_settings({"hls_concurrency": 33})
-+
-+
-+def test_tmdb_key_is_never_returned_or_exported(monkeypatch):
-+    secret = "very-secret-tmdb-key"
-+    update_settings({"tmdb": {"api_key": secret}})
-+    assert settings_store.read_settings()["tmdb"] == {"key_set": True}
-+    assert secret not in str(settings_store.read_settings())
-+    assert secret not in settings_store.export_env()
-+
-+
- # ---------------------------------------------------------------------------
- # Toggles
- # ---------------------------------------------------------------------------
-diff --git a/tests/test_transfer.py b/tests/test_transfer.py
-new file mode 100644
-index 0000000..e989cc7
---- /dev/null
-+++ b/tests/test_transfer.py
-@@ -0,0 +1,43 @@
-+"""yt-dlp transfer options without contacting a network."""
-+
-+import sys
-+from pathlib import Path
-+from types import SimpleNamespace
-+
-+from aniworld.models.common.transfer import download_with_ytdlp
-+
-+
-+def test_ytdlp_uses_requested_fragment_concurrency(monkeypatch, tmp_path):
-+    seen = {}
-+
-+    class FakeYoutubeDL:
-+        def __init__(self, options):
-+            seen.update(options)
-+
-+        def __enter__(self):
-+            return self
-+
-+        def __exit__(self, *_args):
-+            return False
-+
-+        def download(self, urls):
-+            seen["urls"] = urls
-+            Path(seen["outtmpl"]).write_bytes(b"media")
-+            return 0
-+
-+    monkeypatch.setitem(sys.modules, "yt_dlp", SimpleNamespace(YoutubeDL=FakeYoutubeDL))
-+    output = tmp_path / "episode.mkv"
-+    result = download_with_ytdlp(
-+        "https://cdn.example/video.m3u8",
-+        output,
-+        {"Referer": "https://source.example/"},
-+        10,
-+        lambda _data: None,
-+    )
-+
-+    assert result == output
-+    assert seen["concurrent_fragment_downloads"] == 10
-+    assert seen["fragment_retries"] == 10
-+    assert seen["http_chunk_size"] == 10 * 1024 * 1024
-+    assert seen["nopart"] is True
-+    assert seen["http_headers"]["Referer"] == "https://source.example/"
++{% block scripts %}
++<script src="{{ url_for('static', filename='upcoming.js') }}?v={{ app_version }}-page-layout"></script>
+ {% endblock %}
+-{% block scripts %}<script src="{{ url_for('static', filename='upcoming.js') }}?v={{ app_version }}"></script>{% endblock %}
 diff --git a/tests/test_upcoming.py b/tests/test_upcoming.py
-new file mode 100644
-index 0000000..31f8db5
---- /dev/null
+index 31f8db5..a83e7e6 100644
+--- a/tests/test_upcoming.py
 +++ b/tests/test_upcoming.py
-@@ -0,0 +1,104 @@
-+"""Upcoming watchlist validation, matching and secret-safe TMDB failures."""
-+
-+from types import SimpleNamespace
-+
-+from aniworld.web import db, tmdb, upcoming
-+
-+MOVIE = {
-+    "tmdb_id": 42,
-+    "title": "Future Film",
-+    "original_title": "Future Film",
-+    "release_date": "2999-01-01",
-+    "release_year": 2999,
-+    "poster_path": "/poster.jpg",
-+    "overview": "Soon",
-+}
-+
-+
-+def test_tmdb_http_error_does_not_leak_v3_key(monkeypatch):
-+    secret = "1234567890abcdef1234567890abcdef"
-+    monkeypatch.setenv("ANIWORLD_TMDB_API_KEY", secret)
-+    response = SimpleNamespace(status_code=500)
-+    monkeypatch.setattr(tmdb.requests, "get", lambda *args, **kwargs: response)
-+
-+    try:
-+        tmdb.search_movies("film")
-+    except tmdb.TMDBError as exc:
-+        assert secret not in str(exc)
-+        assert str(exc) == "TMDB request failed (500)"
-+    else:
-+        raise AssertionError("TMDBError was not raised")
-+
-+
-+def test_upcoming_api_never_returns_tmdb_key(client, monkeypatch):
-+    secret = "secret-key"
-+    monkeypatch.setenv("ANIWORLD_TMDB_API_KEY", secret)
-+    payload = client.get("/api/upcoming").get_json()
-+    assert payload["configured"] is True
-+    assert secret not in str(payload)
-+
-+
-+def test_add_pause_resume_and_prevent_finished_requeue(client, monkeypatch):
-+    monkeypatch.setattr(tmdb, "movie_details", lambda _movie_id: dict(MOVIE))
-+    added = client.post("/api/upcoming", json={"tmdb_id": 42})
-+    assert added.status_code == 201
-+    movie_id = added.get_json()["id"]
-+
-+    assert (
-+        client.patch(f"/api/upcoming/{movie_id}", json={"status": "paused"}).status_code
-+        == 200
-+    )
-+    assert (
-+        client.patch(
-+            f"/api/upcoming/{movie_id}", json={"status": "waiting"}
-+        ).status_code
-+        == 200
-+    )
-+    db.update_upcoming_movie(movie_id, status="downloaded")
-+    assert (
-+        client.patch(f"/api/upcoming/{movie_id}", json={"status": "paused"}).status_code
-+        == 409
-+    )
-+
-+
-+def test_multiple_verified_sites_choose_priority_instead_of_stalling(monkeypatch):
-+    movie = {**MOVIE, "release_date": "2000-01-01", "release_year": 2000}
-+    monkeypatch.setattr(upcoming.settings_store, "site_enabled", lambda _site: True)
-+    monkeypatch.setattr(upcoming.sitesearch, "MOVIE_SITES", ("megakino", "filmo"))
-+    monkeypatch.setattr(
-+        upcoming.sitesearch,
-+        "search",
-+        lambda site, _title: [
-+            {"title": "Future Film", "url": f"https://{site}.example/movie"}
-+        ],
-+    )
-+    provider = SimpleNamespace(
-+        series_cls=lambda url: SimpleNamespace(release_year="2000")
-+    )
-+    monkeypatch.setattr("aniworld.providers.resolve_provider", lambda _url: provider)
-+
-+    assert upcoming._exact_hit(movie)["url"] == "https://megakino.example/movie"
-+
-+
-+def test_non_latin_titles_do_not_match_only_because_normalisation_is_empty(monkeypatch):
-+    movie = {
-+        **MOVIE,
-+        "title": "日本映画",
-+        "original_title": "日本映画",
-+        "release_year": 2000,
-+    }
-+    monkeypatch.setattr(upcoming.settings_store, "site_enabled", lambda _site: True)
-+    monkeypatch.setattr(upcoming.sitesearch, "MOVIE_SITES", ("megakino",))
-+    monkeypatch.setattr(
-+        upcoming.sitesearch,
-+        "search",
-+        lambda _site, _title: [
-+            {"title": "한국 영화", "url": "https://megakino.example/wrong"}
-+        ],
-+    )
-+    provider = SimpleNamespace(
-+        series_cls=lambda url: SimpleNamespace(release_year="2000")
-+    )
-+    monkeypatch.setattr("aniworld.providers.resolve_provider", lambda _url: provider)
-+
-+    assert upcoming._exact_hit(movie) is None
-diff --git a/tests/test_worker.py b/tests/test_worker.py
-index 8ba9c1a..66314db 100644
---- a/tests/test_worker.py
-+++ b/tests/test_worker.py
-@@ -9,6 +9,7 @@ import json
- 
- import pytest
- 
-+from aniworld.models.common import common
- from aniworld.web import db, worker
+@@ -15,6 +15,16 @@ MOVIE = {
+ }
  
  
-@@ -125,6 +126,25 @@ def test_progress_is_visible_while_it_runs(queue_item, run_worker):
-     assert seen == [(0, "https://x/ep1"), (1, "https://x/ep2")]
- 
- 
-+def test_hls_concurrency_change_applies_from_the_next_episode(
-+    monkeypatch, queue_item, run_worker
-+):
-+    monkeypatch.setenv("ANIWORLD_HLS_CONCURRENCY", "8")
-+    seen = []
-+    queue_id = queue_item(episodes=["https://x/ep1", "https://x/ep2"])
-+    db.set_queue_status(queue_id, "running")
-+
-+    def watch(url):
-+        seen.append(common._episode_hls_concurrency())
-+        if url.endswith("ep1"):
-+            monkeypatch.setenv("ANIWORLD_HLS_CONCURRENCY", "10")
-+            assert common._episode_hls_concurrency() == 8
-+
-+    run_worker(queue_id, on_download=watch)
-+    assert seen == [8, 10]
-+    assert common.get_ffmpeg_progress()["queue_id"] is None
++def test_upcoming_page_uses_the_same_layout_language_as_autosync(client):
++    page = client.get("/upcoming")
++    assert page.status_code == 200
++    html = page.get_data(as_text=True)
++    assert 'class="container container-narrow"' in html
++    assert 'class="page-head"' in html
++    assert 'class="data-table stacked-table"' in html
++    assert 'class="sync-stats"' in html
 +
 +
- def test_a_finished_download_is_not_cancelled(queue_item, run_worker):
-     queue_id = queue_item(episodes=["https://x/ep1"])
-     db.set_queue_status(queue_id, "running")
+ def test_tmdb_http_error_does_not_leak_v3_key(monkeypatch):
+     secret = "1234567890abcdef1234567890abcdef"
+     monkeypatch.setenv("ANIWORLD_TMDB_API_KEY", secret)
