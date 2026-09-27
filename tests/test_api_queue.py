@@ -167,6 +167,15 @@ def test_the_queue_comes_back_with_progress(client, queue_item):
     assert "ffmpeg_progress" in body
 
 
+def test_queue_page_forces_the_episode_progress_assets_to_refresh(client):
+    body = client.get("/queue").get_data(as_text=True)
+
+    assert "queue.js?v=" in body
+    assert "queue.js?v=" in body and "-episode-progress-v2" in body
+    assert "style.css?v=" in body
+    assert body.count("-episode-progress-v2") >= 2
+
+
 def test_progress_carries_the_numbers_the_queue_shows(client, queue_item):
     """The percentage and the speed under the bar come straight from here."""
     from aniworld.models.common import common
