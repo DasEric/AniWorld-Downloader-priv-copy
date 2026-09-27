@@ -137,8 +137,26 @@
     save({ hls_concurrency: el("hlsConcurrency").value });
   });
 
-  el("saveTmdbBtn").addEventListener("click", () => {
-    save({ tmdb: { api_key: el("tmdbApiKey").value } });
+  el("saveTmdbBtn").addEventListener("click", async () => {
+    const button = el("saveTmdbBtn");
+    const field = el("tmdbApiKey");
+    const value = field.value;
+    button.disabled = true;
+    try {
+      const data = await apiSend("/api/settings", "PUT", {
+        tmdb: { api_key: value }
+      });
+      const keySet = Boolean(data.tmdb && data.tmdb.key_set);
+      if (value.trim() && value !== SECRET_PLACEHOLDER && !keySet) {
+        throw new Error(t("settings.tmdb_not_saved", "The server did not confirm the TMDB key"));
+      }
+      field.value = keySet ? SECRET_PLACEHOLDER : "";
+      showToast(t("settings.saved", "Saved"));
+    } catch (error) {
+      showToast(`${t("settings.save_failed", "Could not save")}: ${error.message}`);
+    } finally {
+      button.disabled = false;
+    }
   });
 
   /* ===== Where a download lands =====

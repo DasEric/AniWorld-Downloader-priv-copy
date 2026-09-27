@@ -49,7 +49,14 @@ def update_settings():
 
     if discord_changed:
         _reconcile_discord()
-    return jsonify({"ok": True})
+
+    # Confirm secret writes without ever returning the secret.  The settings
+    # page uses this to distinguish a durable TMDB save from a stale/cached UI
+    # that merely displayed a success toast.
+    result = {"ok": True}
+    if "tmdb" in data:
+        result["tmdb"] = settings_store.tmdb_settings()
+    return jsonify(result)
 
 
 def preview_schedule():

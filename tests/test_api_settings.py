@@ -19,6 +19,29 @@ def test_a_setting_can_be_changed(client):
     assert settings_store.ui_language() == "de"
 
 
+def test_tmdb_key_saves_while_discord_bot_is_enabled(client, monkeypatch, tmp_path):
+    """A running/configured Discord bot must not intercept TMDB-only saves."""
+    from dotenv import dotenv_values
+
+    from aniworld.web.views import api_settings
+
+    stored = tmp_path / ".web-settings.env"
+    monkeypatch.setattr(settings_store, "PANEL_SETTINGS_PATH", stored)
+    monkeypatch.setenv("ANIWORLD_DISCORD_BOT_ENABLED", "1")
+    monkeypatch.setenv("ANIWORLD_DISCORD_TOKEN", "discord-token")
+
+    def unexpected_reconcile():
+        raise AssertionError("TMDB-only saves must not restart the Discord bot")
+
+    monkeypatch.setattr(api_settings, "_reconcile_discord", unexpected_reconcile)
+    response = client.put("/api/settings", json={"tmdb": {"api_key": "tmdb-secret"}})
+
+    assert response.status_code == 200
+    assert response.get_json() == {"ok": True, "tmdb": {"key_set": True}}
+    assert settings_store.tmdb_settings() == {"key_set": True}
+    assert dotenv_values(stored)["ANIWORLD_TMDB_API_KEY"] == "tmdb-secret"
+
+
 def test_a_persistence_failure_is_reported_as_a_server_error(client, monkeypatch):
     def fail(_data):
         raise settings_store.SettingsPersistenceError("settings were not saved")

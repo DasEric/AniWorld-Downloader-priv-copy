@@ -696,7 +696,7 @@
           <p class="hint" data-i18n="settings.tmdb_hint">Used for movie metadata and the Upcoming watchlist. The key is stored as a secret and is never returned or exported.</p>
           <div class="inline-form">
             <input type="password" id="tmdbApiKey" autocomplete="new-password" placeholder="TMDB API key or read token" />
-            <button class="btn btn-primary" id="saveTmdbBtn" data-i18n="common.save">Save</button>
+            <button type="button" class="btn btn-primary" id="saveTmdbBtn" data-i18n="common.save">Save</button>
           </div>
         </section>
         <section class="card">
@@ -760,7 +760,7 @@
           </p>
 
           <div class="action-row">
-            <button class="btn btn-primary" id="saveDiscordBtn" data-i18n="common.save">Save</button>
+            <button type="button" class="btn btn-primary" id="saveDiscordBtn" data-i18n="common.save">Save</button>
             <span id="discordStatus" class="status-pill"></span>
           </div>
         </section>
@@ -812,5 +812,5 @@
 <script>
   window.AUTH_ENABLED = {{ auth_enabled | tojson }};
 </script>
-<script src="{{ url_for('static', filename='settings.js') }}?v={{ app_version }}"></script>
+<script src="{{ url_for('static', filename='settings.js') }}?v={{ app_version }}-tmdb-save-confirmation"></script>
 {% endblock %}
