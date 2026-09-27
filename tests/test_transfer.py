@@ -4,7 +4,7 @@ import sys
 from pathlib import Path
 from types import SimpleNamespace
 
-from aniworld.models.common.transfer import download_with_ytdlp
+from aniworld.models.common.transfer import _format_selector, download_with_ytdlp
 
 
 def test_ytdlp_uses_requested_fragment_concurrency(monkeypatch, tmp_path):
@@ -39,5 +39,16 @@ def test_ytdlp_uses_requested_fragment_concurrency(monkeypatch, tmp_path):
     assert seen["concurrent_fragment_downloads"] == 10
     assert seen["fragment_retries"] == 10
     assert seen["http_chunk_size"] == 10 * 1024 * 1024
-    assert seen["nopart"] is True
+    assert seen["retries"] == 5
+    assert seen["nopart"] is False
+    assert seen["continuedl"] is True
     assert seen["http_headers"]["Referer"] == "https://source.example/"
+    assert seen["http_headers"]["User-Agent"]
+
+
+def test_ytdlp_prefers_the_requested_audio_language():
+    selector = _format_selector("deu")
+
+    assert "bestaudio[language^=de]" in selector
+    assert "bestaudio[language^=ger]" in selector
+    assert selector.endswith("bestvideo+bestaudio/best")

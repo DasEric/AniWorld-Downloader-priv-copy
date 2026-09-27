@@ -184,8 +184,8 @@
       "settings.preview_hint":
         "Wo ein Download landet: der Pfad von oben und die aktuelle Namensvorlage zusammengesetzt. Filme nutzen von der Vorlage nur die Dateiendung.",
       "settings.provider_fallback": "Anbieter-Reihenfolge",
-      "settings.hls_concurrency": "Parallele HLS-Verbindungen",
-      "settings.hls_concurrency_hint": "Standard: 8. Der Wert wird beim Start einer Folge festgeschrieben und gilt daher erst ab der nächsten Folge. Mit 1 wird der parallele HLS-Download deaktiviert.",
+      "settings.hls_concurrency": "Parallele Fragment-Verbindungen",
+      "settings.hls_concurrency_hint": "Standard: 8. Der Wert wird beim Start einer Folge festgeschrieben und gilt daher erst ab der nächsten Folge. Mit 1 wird sequenziell heruntergeladen.",
       "settings.provider_fallback_hint":
         "Zieh einen Anbieter, um ihn zu verschieben. Der ausgewählte Anbieter wird immer zuerst versucht. Schlägt er fehl, wird diese Reihenfolge durchlaufen.",
       "settings.lang_separation": "Sprachen in eigene Ordner trennen",

@@ -6,11 +6,15 @@ from types import SimpleNamespace
 
 import pytest
 
-from aniworld.models.common import common, hls
+from aniworld.models.common import common, hls, transfer
 
 
 @pytest.fixture(autouse=True)
-def reset_progress():
+def reset_progress(monkeypatch):
+    def unavailable(*_args, **_kwargs):
+        raise transfer.TransferUnavailable("disabled in compatibility-path test")
+
+    monkeypatch.setattr(transfer, "download_with_ytdlp", unavailable)
     common._clear_download_progress()
     yield
     common._clear_download_progress()
@@ -266,7 +270,9 @@ def test_ffmpeg_output_growth_is_not_claimed_as_network_speed(monkeypatch):
         def wait(self, timeout=None):
             return self.returncode
 
-    monkeypatch.setattr(common.ffmpeg, "compile", lambda *_args, **_kwargs: ["ffmpeg", "out"])
+    monkeypatch.setattr(
+        common.ffmpeg, "compile", lambda *_args, **_kwargs: ["ffmpeg", "out"]
+    )
     monkeypatch.setattr(common.subprocess, "Popen", lambda *_args, **_kwargs: Process())
 
     common._run_ffmpeg_with_progress(object(), keep_progress=True)
@@ -278,7 +284,9 @@ def test_ffmpeg_output_growth_is_not_claimed_as_network_speed(monkeypatch):
 
 
 def test_manual_hls_reports_measured_transfer_rate(monkeypatch, tmp_path):
-    playlist = "#EXTM3U\n#EXTINF:5,\nfirst.jpg\n#EXTINF:5,\nsecond.jpg\n#EXT-X-ENDLIST\n"
+    playlist = (
+        "#EXTM3U\n#EXTINF:5,\nfirst.jpg\n#EXTINF:5,\nsecond.jpg\n#EXT-X-ENDLIST\n"
+    )
     packet = b"\x47" + b"\x00" * 187
 
     class Response:
@@ -318,7 +326,7 @@ def test_manual_hls_reports_measured_transfer_rate(monkeypatch, tmp_path):
             b"<html>temporary CDN failure</html>",
         ),
         (
-            "#EXTM3U\n#EXT-X-MAP:URI=\"init.mp4\"\n#EXTINF:5,\nfirst.m4s\n#EXT-X-ENDLIST\n",
+            '#EXTM3U\n#EXT-X-MAP:URI="init.mp4"\n#EXTINF:5,\nfirst.m4s\n#EXT-X-ENDLIST\n',
             None,
         ),
     ],
@@ -373,6 +381,56 @@ def test_failed_local_hls_remux_retries_original_playlist(monkeypatch, tmp_path)
     assert used_parallel is False
     assert inputs == [str(output.with_suffix(".seg.ts")), playlist]
     assert not output.with_suffix(".seg.ts").exists()
+
+
+def test_ytdlp_is_the_primary_full_stream_transfer(monkeypatch, tmp_path):
+    output = tmp_path / "episode.temp_full.mkv"
+    seen = {}
+
+    def download(url, path, headers, concurrency, hook, preferred_audio_lang=None):
+        seen.update(
+            url=url,
+            headers=headers,
+            concurrency=concurrency,
+            language=preferred_audio_lang,
+        )
+        path.write_bytes(b"media")
+        hook(
+            {
+                "status": "downloading",
+                "downloaded_bytes": 50,
+                "total_bytes": 100,
+                "speed": 20 * 1024 * 1024,
+            }
+        )
+
+    monkeypatch.setattr(transfer, "download_with_ytdlp", download)
+    monkeypatch.setattr(
+        common,
+        "_try_parallel_hls",
+        lambda *_args, **_kwargs: pytest.fail("compatibility HLS must be second"),
+    )
+
+    staged = common._download_full_stream(
+        "https://cdn.example/master.m3u8",
+        output,
+        {},
+        {"Referer": "https://source.example/"},
+        {},
+        "copy",
+        "Episode",
+        "deu",
+        parallel_hls=True,
+    )
+
+    assert staged is True
+    assert seen == {
+        "url": "https://cdn.example/master.m3u8",
+        "headers": {"Referer": "https://source.example/"},
+        "concurrency": 8,
+        "language": "deu",
+    }
+    assert common.get_ffmpeg_progress()["percent"] == 95.0
 
 
 def test_failed_parallel_remux_retries_original_playlist(monkeypatch, tmp_path):

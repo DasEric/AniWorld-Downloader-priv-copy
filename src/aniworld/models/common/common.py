@@ -308,6 +308,8 @@ def _cleanup_episode_download(self):
         ".temp_full.mkv",
         ".temp_audio.mkv",
         ".temp_video.mkv",
+        ".temp_full.mkv.part",
+        ".temp_full.mkv.ytdl",
         ".temp_full.seg.ts",
         ".new.mkv",
         ".convert.mkv",
@@ -488,6 +490,7 @@ def _episode_hls_concurrency():
     if value is not None:
         return value
     from .hls import get_concurrency
+
     return get_concurrency()
 
 
@@ -1200,8 +1203,10 @@ def _download_hls_manual(m3u8_url, headers, temp_ts, label=""):
                 # This path concatenates MPEG-TS packets. Some hosters serve
                 # fMP4 fragments or an HTML error page under a disguised URL;
                 # those bytes cannot become a valid .ts file.
-                if len(data) < 188 or data[0] != 0x47 or (
-                    len(data) >= 376 and data[188] != 0x47
+                if (
+                    len(data) < 188
+                    or data[0] != 0x47
+                    or (len(data) >= 376 and data[188] != 0x47)
                 ):
                     raise _HLSManualUnsupported("segment is not MPEG-TS")
                 out.write(data)
@@ -1319,6 +1324,70 @@ def _download_full_stream(
     direct files can be staged over HTTP so the UI gets byte-accurate progress.
     Returns True when a staged path with reserved finalisation progress was used.
     """
+    # The reference downloader uses yt-dlp as its primary transfer engine.  It
+    # keeps a full fragment window busy and handles retries/resume without the
+    # in-order head-of-line wait of our compatibility HLS fetcher.
+    try:
+        from .transfer import download_with_ytdlp
+
+        def _ytdlp_progress(data):
+            try:
+                from ...playwright.captcha import _local
+                from ...web.db import is_queue_force_cancelled
+
+                queue_id = getattr(_local, "queue_id", None)
+                if queue_id is not None and is_queue_force_cancelled(queue_id):
+                    raise DownloadCancelled("Download cancelled")
+            except DownloadCancelled:
+                raise
+            except Exception:
+                pass
+            status = data.get("status")
+            total = data.get("total_bytes") or data.get("total_bytes_estimate") or 0
+            downloaded = data.get("downloaded_bytes") or 0
+            percent = min(95.0, (downloaded / total * 95.0) if total else 0.0)
+            speed = data.get("speed") or 0
+            bandwidth = f"{speed / 1024 / 1024:.1f} MB/s" if speed else ""
+            with _ffmpeg_progress_lock:
+                _ffmpeg_progress.update(
+                    percent=percent,
+                    time="",
+                    speed="",
+                    bandwidth=bandwidth,
+                    active=status != "finished",
+                )
+
+        download_with_ytdlp(
+            stream_url,
+            temp_full,
+            headers,
+            _episode_hls_concurrency(),
+            _ytdlp_progress,
+            preferred_audio_lang=audio_code,
+        )
+        with _ffmpeg_progress_lock:
+            _ffmpeg_progress.update(percent=95.0, active=True)
+        return True
+    except DownloadCancelled:
+        temp_full.unlink(missing_ok=True)
+        raise
+    except Exception as exc:
+        cause = exc
+        while cause is not None:
+            if isinstance(cause, DownloadCancelled) or "Download cancelled" in str(
+                cause
+            ):
+                temp_full.unlink(missing_ok=True)
+                temp_full.with_name(temp_full.name + ".part").unlink(missing_ok=True)
+                temp_full.with_name(temp_full.name + ".ytdl").unlink(missing_ok=True)
+                raise DownloadCancelled("Download cancelled") from exc
+            cause = getattr(cause, "__cause__", None)
+        logger.debug(
+            f"[TRANSFER] primary yt-dlp transfer unavailable ({exc}); using compatibility path"
+        )
+        temp_full.unlink(missing_ok=True)
+        _clear_download_progress()
+
     if direct_http:
         direct_source = temp_full.with_suffix(".direct.mp4")
         try:
@@ -1420,44 +1489,6 @@ def _download_full_stream(
                 temp_full.unlink(missing_ok=True)
             finally:
                 temp_ts.unlink(missing_ok=True)
-
-    # yt-dlp has the mature retry/chunking path used by the reference downloader.
-    # Keep the proven FFmpeg path as a compatibility fallback.
-    try:
-        from .transfer import download_with_ytdlp
-
-        def _ytdlp_progress(data):
-            try:
-                from ...playwright.captcha import _local
-                from ...web.db import is_queue_force_cancelled
-                queue_id = getattr(_local, "queue_id", None)
-                if queue_id is not None and is_queue_force_cancelled(queue_id):
-                    raise DownloadCancelled("Download cancelled")
-            except DownloadCancelled:
-                raise
-            except Exception:
-                pass
-            status = data.get("status")
-            total = data.get("total_bytes") or data.get("total_bytes_estimate") or 0
-            downloaded = data.get("downloaded_bytes") or 0
-            percent = min(95.0, (downloaded / total * 95.0) if total else 0.0)
-            speed = data.get("speed") or 0
-            bandwidth = f"{speed / 1024 / 1024:.1f} MB/s" if speed else ""
-            with _ffmpeg_progress_lock:
-                _ffmpeg_progress.update(percent=percent, time="", speed="", bandwidth=bandwidth,
-                                        active=status != "finished")
-
-        download_with_ytdlp(stream_url, temp_full, headers,
-                            _episode_hls_concurrency(), _ytdlp_progress)
-        with _ffmpeg_progress_lock:
-            _ffmpeg_progress.update(percent=95.0, active=True)
-        return True
-    except DownloadCancelled:
-        temp_full.unlink(missing_ok=True)
-        raise
-    except Exception as exc:
-        logger.debug(f"[TRANSFER] yt-dlp unavailable for this stream ({exc}); using FFmpeg")
-        temp_full.unlink(missing_ok=True)
 
     _run_ffmpeg_with_progress(
         ffmpeg.input(stream_url, **input_kwargs).output(

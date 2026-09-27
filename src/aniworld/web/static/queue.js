@@ -224,16 +224,20 @@
             ${renderActions(item)}
           </div>
         </div>
-        <div class="progress-caption">${t("queue.overall_progress", "Overall progress")}</div>
-        <div class="progress-track"><div class="progress-fill" data-progress="overall" data-percent="${percent}" style="width:${percent}%"></div></div>
-        <div class="progress-stats"${item.status === "running" ? "" : " hidden"}>
-          <span data-progress-percent>${percent}%</span>
-          <span data-progress-speed>${esc(speedLabel(item, ffmpeg))}</span>
+        <div class="progress-caption progress-caption-row">
+          <span>${t("queue.overall_progress", "Overall progress")}</span>
+          <span class="progress-inline-stats"${item.status === "running" ? "" : " hidden"}>
+            <span data-progress-percent>${percent}%</span>
+            <span data-progress-speed>${esc(speedLabel(item, ffmpeg))}</span>
+          </span>
         </div>
+        <div class="progress-track"><div class="progress-fill" data-progress="overall" data-percent="${percent}" style="width:${percent}%"></div></div>
         <div class="episode-progress"${item.status === "running" ? "" : " hidden"}>
-          <div class="progress-caption">${t("queue.current_episode_progress", "Current episode")}</div>
+          <div class="progress-caption progress-caption-row">
+            <span>${t("queue.current_episode_progress", "Current episode")}</span>
+            <span class="progress-inline-stats"><span data-episode-percent>${episode}%</span><span data-episode-time>${esc(ffmpeg.time || "")}</span></span>
+          </div>
           <div class="progress-track progress-track-episode"><div class="progress-fill progress-fill-episode" data-progress="episode" data-percent="${episode}" style="width:${episode}%"></div></div>
-          <div class="progress-stats"><span data-episode-percent>${episode}%</span><span data-episode-time>${esc(ffmpeg.time || "")}</span></div>
         </div>
         ${captchaBtn ? `<div class="action-row">${captchaBtn}</div>` : ""}
         ${renderErrors(item)}

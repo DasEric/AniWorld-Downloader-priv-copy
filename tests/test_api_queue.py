@@ -171,9 +171,9 @@ def test_queue_page_forces_the_episode_progress_assets_to_refresh(client):
     body = client.get("/queue").get_data(as_text=True)
 
     assert "queue.js?v=" in body
-    assert "queue.js?v=" in body and "-episode-progress-v2" in body
+    assert "queue.js?v=" in body and "-fast-transfer-compact-progress" in body
     assert "style.css?v=" in body
-    assert body.count("-episode-progress-v2") >= 2
+    assert body.count("-fast-transfer-compact-progress") >= 2
 
 
 def test_progress_carries_the_numbers_the_queue_shows(client, queue_item):

@@ -1482,7 +1482,7 @@ body[data-site="htv"] {
   background: var(--surface);
   border: 1px solid var(--border-soft);
   border-radius: var(--radius-sm);
-  padding: 12px 14px;
+  padding: 10px 14px;
 }
 
 .queue-item-head {
@@ -1552,20 +1552,33 @@ body[data-site="htv"] {
 }
 
 .progress-track {
-  height: 5px;
+  height: 4px;
   background: var(--progress-track);
   border-radius: 3px;
   overflow: hidden;
-  margin-top: 10px;
+  margin-top: 0;
 }
 
 .progress-caption {
-  margin: 0.55rem 0 0.25rem;
+  margin: 0.42rem 0 0.2rem;
   color: var(--text-muted);
   font-size: 0.72rem;
 }
 
-.progress-track-episode { height: 4px; }
+.progress-caption-row,
+.progress-inline-stats {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.progress-inline-stats {
+  justify-content: flex-end;
+  font-variant-numeric: tabular-nums;
+}
+
+.progress-track-episode { height: 3px; }
 .progress-fill-episode { background: var(--success); }
 
 .upcoming-config-notice {
