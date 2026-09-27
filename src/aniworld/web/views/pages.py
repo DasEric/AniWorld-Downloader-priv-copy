@@ -94,3 +94,8 @@ def autosync():
 @bp.route("/settings")
 def settings():
     return render_template("settings.html")
+
+
+@bp.route("/upcoming")
+def upcoming():
+    return render_template("upcoming.html", providers=WORKING_PROVIDERS)

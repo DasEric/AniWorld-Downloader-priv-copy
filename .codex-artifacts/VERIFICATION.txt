@@ -1,0 +1,49 @@
+Branch: models
+Changed fields: queue.overall_progress + queue.current_episode_progress; ANIWORLD_HLS_CONCURRENCY (default 8, range 1..32, snapshotted per episode); yt-dlp transfer fallback; ANIWORLD_TMDB_API_KEY secret; Upcoming movie watchlist and daily exact-match scheduler.
+Original HEAD: 60478653bb3f125f79820a58b9331feb0602d2df
+
+Artifacts:
+MODIFIED_FILE=C:\Users\Eric\Documents\GitHub\AniWorld-Downloader-priv-copy\.codex-artifacts\MODIFIED_FILE.py
+DIFF_FILE=C:\Users\Eric\Documents\GitHub\AniWorld-Downloader-priv-copy\.codex-artifacts\DIFF_FILE.patch
+VERIFICATION=C:\Users\Eric\Documents\GitHub\AniWorld-Downloader-priv-copy\.codex-artifacts\VERIFICATION.txt
+ROLLBACK=C:\Users\Eric\Documents\GitHub\AniWorld-Downloader-priv-copy\.codex-artifacts\ROLLBACK.sh
+
+REVIEW FIXES
+- Reset stale per-episode progress state and refresh the episode time label.
+- Clamp explicit HLS concurrency to 1..32.
+- Prevent TMDB API keys from leaking through HTTP exception URLs.
+- Keep the daily scheduler alive after malformed timestamps or transient errors.
+- Prevent completed/queued Upcoming movies from being paused and re-queued.
+- Accept multiple independently verified exact title/year hits using site priority.
+- Reject empty normalized non-Latin title matches.
+- Validate TMDB poster paths before inserting image URLs.
+- Use one atomic queue progress snapshot per API response.
+- Disable yt-dlp partial files and add focused regression tests.
+
+BASELINE
+Command: $env:PYTHONPATH=(Resolve-Path 'src').Path; python -m pytest -q
+Input: clean HEAD 60478653bb3f125f79820a58b9331feb0602d2df
+Literal result: 1451 passed, 1 skipped in 79.39s (0:01:19)
+Exit status: 0
+Behavior/status: original test suite passed.
+
+MODIFIED
+Command: $env:PYTHONPATH=(Resolve-Path 'src').Path; python -m pytest -q
+Input: reviewed working tree containing progress, HLS concurrency, transfer, TMDB, Upcoming, and regression-test changes
+Literal result: 1460 passed, 1 skipped in 85.20s (0:01:25)
+Exit status: 0
+Behavior/status: complete modified test suite passed; MODIFIED_FILE remains changed.
+
+TARGETED REVIEW
+Command: $env:PYTHONPATH=(Resolve-Path 'src').Path; python -m pytest -q tests/test_upcoming.py tests/test_transfer.py tests/test_worker.py tests/test_settings_store.py tests/test_api_queue.py; ruff check src/aniworld/models/common/common.py src/aniworld/models/common/hls.py src/aniworld/models/common/transfer.py src/aniworld/web/tmdb.py src/aniworld/web/upcoming.py src/aniworld/web/views/api_upcoming.py tests/test_upcoming.py tests/test_transfer.py; git diff --check; node --check src/aniworld/web/static/queue.js; node --check src/aniworld/web/static/settings.js; node --check src/aniworld/web/static/upcoming.js
+Input: final reviewed source and focused regression tests
+Literal result: 211 passed in 10.15s; All checks passed; JavaScript syntax checks and git diff check exited successfully.
+Exit status: 0
+Behavior/status: concurrency snapshot, secret handling, Upcoming state transitions, transfer options, Python lint and JavaScript syntax verified.
+
+ROLLBACK
+Command: git clone --quiet --no-hardlinks . $rollbackCopy; git -C $rollbackCopy apply (Resolve-Path '.codex-artifacts/DIFF_FILE.patch').Path; & 'C:\Program Files\Git\bin\bash.exe' .codex-artifacts/ROLLBACK.sh $rollbackCopy; git -C $rollbackCopy diff --quiet HEAD --
+Input: separate temporary clone of original HEAD with the final DIFF_FILE applied
+Literal output: ROLLBACK_OK: HEAD restored; new source/tests removed; original behavior restored.
+Exit status: 0
+Restored behavior/status: clone matched original HEAD with no tracked diff; added source and test files were removed. The live workspace remains modified.

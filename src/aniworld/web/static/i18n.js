@@ -16,8 +16,22 @@
       "nav.library": "Bibliothek",
       "nav.queue": "Warteschlange",
       "nav.autosync": "Auto-Sync",
+      "nav.upcoming": "Demnächst",
       "nav.settings": "Einstellungen",
       "nav.logout": "Abmelden",
+
+      "upcoming.title": "Demnächst erscheinende Filme",
+      "upcoming.subtitle": "Unveröffentlichte Filme vormerken und nach einem eindeutigen Treffer einreihen.",
+      "upcoming.check": "Jetzt prüfen",
+      "upcoming.configure": "Trage zuerst unter Einstellungen → Integrationen deinen TMDB-Schlüssel ein.",
+      "upcoming.open_settings": "Einstellungen öffnen",
+      "upcoming.add": "Film hinzufügen",
+      "upcoming.browse": "TMDB-Neuerscheinungen",
+      "upcoming.watchlist": "Merkliste",
+      "upcoming.next": "Nächste Prüfung",
+      "upcoming.empty": "Noch keine Filme vorgemerkt.",
+      "upcoming.added": "Hinzugefügt",
+      "upcoming.started": "Prüfung gestartet",
 
       "common.save": "Speichern",
       "common.add": "Hinzufügen",
@@ -77,6 +91,8 @@
       "browse.load_more": "Mehr laden",
 
       "queue.title": "Download-Warteschlange",
+      "queue.overall_progress": "Gesamtfortschritt",
+      "queue.current_episode_progress": "Aktuelle Folge",
       "queue.empty": "Die Warteschlange ist leer.",
       "queue.no_matches": "Zu diesem Filter passt nichts.",
       "queue.clear_finished": "Erledigte entfernen",
@@ -147,6 +163,8 @@
       "settings.preview_hint":
         "Wo ein Download landet: der Pfad von oben und die aktuelle Namensvorlage zusammengesetzt. Filme nutzen von der Vorlage nur die Dateiendung.",
       "settings.provider_fallback": "Anbieter-Reihenfolge",
+      "settings.hls_concurrency": "Parallele HLS-Verbindungen",
+      "settings.hls_concurrency_hint": "Standard: 8. Der Wert wird beim Start einer Folge festgeschrieben und gilt daher erst ab der nächsten Folge. Mit 1 wird der parallele HLS-Download deaktiviert.",
       "settings.provider_fallback_hint":
         "Zieh einen Anbieter, um ihn zu verschieben. Der ausgewählte Anbieter wird immer zuerst versucht. Schlägt er fehl, wird diese Reihenfolge durchlaufen.",
       "settings.lang_separation": "Sprachen in eigene Ordner trennen",
@@ -313,6 +331,8 @@
       "settings.css_import_hint":
         "Ein importiertes Theme wird vom Browser jedes Besuchers geladen. Der Host dahinter sieht also deren IP und kann das Theme jederzeit ändern. Importiere nur URLs, denen du vertraust.",
       "settings.discord": "Discord-Anfrage-Bot",
+      "settings.tmdb": "TMDB",
+      "settings.tmdb_hint": "Wird für Filmdaten und die Demnächst-Merkliste verwendet. Der Schlüssel wird geheim gespeichert und nie zurückgegeben oder exportiert.",
       "settings.discord.enable": "Discord-Bot aktivieren",
       "settings.discord.enable_hint":
         "Nutzer können Filme und Serien über Discord anfragen. Anfragen werden dir zur Freigabe geschickt.",

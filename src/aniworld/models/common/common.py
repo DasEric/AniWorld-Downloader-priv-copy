@@ -444,7 +444,51 @@ _ffmpeg_progress = {
     "speed": "",
     "bandwidth": "",
     "active": False,
+    "queue_id": None,
+    "episode_index": None,
 }
+_episode_context = threading.local()
+
+
+def set_episode_download_context(queue_id, episode_index, hls_concurrency):
+    """Freeze per-episode settings so UI changes only affect the next episode."""
+    _episode_context.queue_id = queue_id
+    _episode_context.episode_index = episode_index
+    _episode_context.hls_concurrency = hls_concurrency
+    with _ffmpeg_progress_lock:
+        _ffmpeg_progress.update(
+            percent=0.0,
+            time="",
+            speed="",
+            bandwidth="",
+            active=False,
+            queue_id=queue_id,
+            episode_index=episode_index,
+        )
+
+
+def clear_episode_download_context():
+    for name in ("queue_id", "episode_index", "hls_concurrency"):
+        if hasattr(_episode_context, name):
+            delattr(_episode_context, name)
+    with _ffmpeg_progress_lock:
+        _ffmpeg_progress.update(
+            percent=0.0,
+            time="",
+            speed="",
+            bandwidth="",
+            active=False,
+            queue_id=None,
+            episode_index=None,
+        )
+
+
+def _episode_hls_concurrency():
+    value = getattr(_episode_context, "hls_concurrency", None)
+    if value is not None:
+        return value
+    from .hls import get_concurrency
+    return get_concurrency()
 
 
 def get_ffmpeg_progress():
@@ -935,6 +979,7 @@ def _download_hls_stream(
                 headers=headers,
                 preferred_audio_lang=audio_lang,
                 label=ep_label,
+                concurrency=_episode_hls_concurrency(),
             )
         except HLSUnsupported as exc:
             logger.debug(
@@ -1209,9 +1254,7 @@ def _parallel_hls_enabled(owner, stream_url):
     ):
         return False
     try:
-        from .hls import get_concurrency
-
-        return get_concurrency() > 1
+        return _episode_hls_concurrency() > 1
     except ImportError:
         return False
 
@@ -1239,6 +1282,7 @@ def _try_parallel_hls(
             include_audio=include_audio,
             progress_end=progress_end,
             keep_progress=True,
+            concurrency=_episode_hls_concurrency(),
         )
     except DownloadCancelled:
         raise
@@ -1376,6 +1420,44 @@ def _download_full_stream(
                 temp_full.unlink(missing_ok=True)
             finally:
                 temp_ts.unlink(missing_ok=True)
+
+    # yt-dlp has the mature retry/chunking path used by the reference downloader.
+    # Keep the proven FFmpeg path as a compatibility fallback.
+    try:
+        from .transfer import download_with_ytdlp
+
+        def _ytdlp_progress(data):
+            try:
+                from ...playwright.captcha import _local
+                from ...web.db import is_queue_force_cancelled
+                queue_id = getattr(_local, "queue_id", None)
+                if queue_id is not None and is_queue_force_cancelled(queue_id):
+                    raise DownloadCancelled("Download cancelled")
+            except DownloadCancelled:
+                raise
+            except Exception:
+                pass
+            status = data.get("status")
+            total = data.get("total_bytes") or data.get("total_bytes_estimate") or 0
+            downloaded = data.get("downloaded_bytes") or 0
+            percent = min(95.0, (downloaded / total * 95.0) if total else 0.0)
+            speed = data.get("speed") or 0
+            bandwidth = f"{speed / 1024 / 1024:.1f} MB/s" if speed else ""
+            with _ffmpeg_progress_lock:
+                _ffmpeg_progress.update(percent=percent, time="", speed="", bandwidth=bandwidth,
+                                        active=status != "finished")
+
+        download_with_ytdlp(stream_url, temp_full, headers,
+                            _episode_hls_concurrency(), _ytdlp_progress)
+        with _ffmpeg_progress_lock:
+            _ffmpeg_progress.update(percent=95.0, active=True)
+        return True
+    except DownloadCancelled:
+        temp_full.unlink(missing_ok=True)
+        raise
+    except Exception as exc:
+        logger.debug(f"[TRANSFER] yt-dlp unavailable for this stream ({exc}); using FFmpeg")
+        temp_full.unlink(missing_ok=True)
 
     _run_ffmpeg_with_progress(
         ffmpeg.input(stream_url, **input_kwargs).output(

@@ -41,6 +41,24 @@ def test_read_settings_never_leaks_the_discord_token(monkeypatch):
     assert "super-secret-token" not in str(discord)
 
 
+def test_hls_concurrency_defaults_validates_and_round_trips():
+    assert settings_store.read_settings()["hls_concurrency"] == 8
+    update_settings({"hls_concurrency": "10"})
+    assert settings_store.hls_concurrency() == 10
+    with pytest.raises(SettingsError):
+        update_settings({"hls_concurrency": 0})
+    with pytest.raises(SettingsError):
+        update_settings({"hls_concurrency": 33})
+
+
+def test_tmdb_key_is_never_returned_or_exported(monkeypatch):
+    secret = "very-secret-tmdb-key"
+    update_settings({"tmdb": {"api_key": secret}})
+    assert settings_store.read_settings()["tmdb"] == {"key_set": True}
+    assert secret not in str(settings_store.read_settings())
+    assert secret not in settings_store.export_env()
+
+
 # ---------------------------------------------------------------------------
 # Toggles
 # ---------------------------------------------------------------------------

@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}Upcoming - AniWorld Downloader{% endblock %}
+{% block content %}
+<div class="page-header"><div><h1 data-i18n="upcoming.title">Upcoming movies</h1><p class="subtitle" data-i18n="upcoming.subtitle">Track unreleased movies and queue them after an exact match is found.</p></div><button class="btn btn-secondary" id="checkUpcomingBtn" data-i18n="upcoming.check">Check now</button></div>
+<section class="card" id="tmdbMissing" hidden><p data-i18n="upcoming.configure">Add your TMDB key under Settings → Integrations first.</p><a class="btn btn-primary" href="{{ url_for('pages.settings') }}#integrations" data-i18n="upcoming.open_settings">Open settings</a></section>
+<section class="card">
+  <h2 data-i18n="upcoming.add">Add movie</h2>
+  <div class="inline-form"><input id="upcomingSearch" type="search" placeholder="Movie title"/><button class="btn btn-primary" id="searchUpcomingBtn" data-i18n="index.search">Search</button><button class="btn btn-secondary" id="browseUpcomingBtn" data-i18n="upcoming.browse">TMDB upcoming</button></div>
+  <div id="upcomingResults" class="upcoming-grid"></div>
+</section>
+<section class="card"><div class="section-head"><h2 data-i18n="upcoming.watchlist">Watchlist</h2><span class="hint" id="upcomingSchedule"></span></div><div id="upcomingList"></div></section>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='upcoming.js') }}?v={{ app_version }}"></script>{% endblock %}

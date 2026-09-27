@@ -206,6 +206,34 @@ _SCHEMA = (
     )
     """,
     "CREATE INDEX IF NOT EXISTS idx_api_key_hash ON api_keys (key_hash)",
+    """
+    CREATE TABLE IF NOT EXISTS upcoming_movies (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        tmdb_id INTEGER NOT NULL UNIQUE,
+        title TEXT NOT NULL,
+        original_title TEXT NOT NULL DEFAULT '',
+        release_date TEXT NOT NULL,
+        release_year INTEGER NOT NULL,
+        poster_path TEXT,
+        overview TEXT NOT NULL DEFAULT '',
+        language TEXT NOT NULL DEFAULT 'German Dub',
+        provider TEXT NOT NULL DEFAULT 'VOE',
+        custom_path_id INTEGER,
+        status TEXT NOT NULL DEFAULT 'waiting',
+        matched_url TEXT,
+        queue_id INTEGER,
+        last_checked_at TEXT,
+        last_message TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_upcoming_status ON upcoming_movies (status, release_date)",
+    """
+    CREATE TABLE IF NOT EXISTS upcoming_state (
+        key TEXT PRIMARY KEY,
+        value TEXT
+    )
+    """,
 )
 
 # Columns added after the first release. Older databases get them via ALTER.
@@ -464,6 +492,64 @@ def add_to_queue(
             "UPDATE download_queue SET position = ? WHERE id = ?", (queue_id, queue_id)
         )
         return queue_id
+
+
+def list_upcoming_movies():
+    with session() as conn:
+        return _rows(conn, "SELECT * FROM upcoming_movies ORDER BY release_date, id")
+
+
+def get_upcoming_movie(movie_id):
+    with session() as conn:
+        row = conn.execute("SELECT * FROM upcoming_movies WHERE id = ?", (movie_id,)).fetchone()
+        return dict(row) if row else None
+
+
+def add_upcoming_movie(movie, language="German Dub", provider="VOE", custom_path_id=None):
+    with session() as conn:
+        cur = conn.execute(
+            "INSERT INTO upcoming_movies (tmdb_id,title,original_title,release_date,release_year,poster_path,overview,language,provider,custom_path_id) VALUES (?,?,?,?,?,?,?,?,?,?)",
+            (movie["tmdb_id"], movie["title"], movie.get("original_title", ""),
+             movie["release_date"], movie["release_year"], movie.get("poster_path"),
+             movie.get("overview", ""), language, provider, custom_path_id),
+        )
+        return cur.lastrowid
+
+
+def update_upcoming_movie(movie_id, **fields):
+    allowed = {"status", "matched_url", "queue_id", "last_checked_at", "last_message", "language", "provider", "custom_path_id"}
+    values = {key: value for key, value in fields.items() if key in allowed}
+    if not values:
+        return
+    with session() as conn:
+        conn.execute(
+            f"UPDATE upcoming_movies SET {', '.join(f'{key} = ?' for key in values)} WHERE id = ?",
+            (*values.values(), movie_id),
+        )
+
+
+def delete_upcoming_movie(movie_id):
+    with session() as conn:
+        conn.execute("DELETE FROM upcoming_movies WHERE id = ?", (movie_id,))
+
+
+def upcoming_state_get(key):
+    with session() as conn:
+        row = conn.execute("SELECT value FROM upcoming_state WHERE key = ?", (key,)).fetchone()
+        return row[0] if row else None
+
+
+def upcoming_state_set(key, value):
+    with session() as conn:
+        conn.execute("INSERT INTO upcoming_state(key,value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", (key, value))
+
+
+def finish_upcoming_queue(queue_id, queue_status):
+    status = "downloaded" if queue_status == "completed" else "error"
+    message = "Download completed" if status == "downloaded" else "Queued download failed"
+    with session() as conn:
+        conn.execute("UPDATE upcoming_movies SET status = ?, last_message = ? WHERE queue_id = ?",
+                     (status, message, queue_id))
 
 
 # How long the item has been downloading, NULL until it starts. Both timestamps

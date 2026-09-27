@@ -549,7 +549,7 @@ def _load_media_playlist(playlist_url, headers):
     return _MediaPlaylist(playlist_url, segments, init_uri)
 
 
-def _download_playlist(playlist, headers, temp_prefix, suffix, tracker):
+def _download_playlist(playlist, headers, temp_prefix, suffix, tracker, concurrency):
     """Fetch every segment of a media playlist, in order, into one file.
 
     Returns the path written. The extension reflects the segment container so
@@ -559,7 +559,6 @@ def _download_playlist(playlist, headers, temp_prefix, suffix, tracker):
     output_path = temp_prefix.with_suffix(
         f"{suffix}{'.mp4' if playlist.init_uri else '.ts'}"
     )
-    concurrency = get_concurrency()
 
     key_cache = {}
     key_cache_lock = threading.Lock()
@@ -649,6 +648,7 @@ def download_hls_parallel(
     include_audio=True,
     progress_end=100.0,
     keep_progress=False,
+    concurrency=None,
 ):
     """Download an HLS stream into local files ready for an FFmpeg remux.
 
@@ -658,7 +658,9 @@ def download_hls_parallel(
     Raises `HLSUnsupported` when the playlist needs features this downloader
     does not implement — callers should fall back to plain FFmpeg then.
     """
-    if get_concurrency() == 1:
+    concurrency = get_concurrency() if concurrency is None else int(concurrency)
+    concurrency = max(1, min(concurrency, MAX_CONCURRENCY))
+    if concurrency == 1:
         raise HLSUnsupported("parallel HLS download disabled")
 
     temp_prefix = Path(temp_prefix)
@@ -706,14 +708,14 @@ def download_hls_parallel(
         _publish_progress(percent=0.0, time="", speed="", bandwidth="", active=True)
         written.append(
             _download_playlist(
-                video_media, headers, temp_prefix, ".hls_video", tracker
+                video_media, headers, temp_prefix, ".hls_video", tracker, concurrency
             )
         )
 
         if audio_media:
             written.append(
                 _download_playlist(
-                    audio_media, headers, temp_prefix, ".hls_audio", tracker
+                    audio_media, headers, temp_prefix, ".hls_audio", tracker, concurrency
                 )
             )
 

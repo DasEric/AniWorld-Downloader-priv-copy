@@ -94,6 +94,15 @@
             through this order.
           </p>
 
+          <h3 data-i18n="settings.hls_concurrency">Parallel HLS connections</h3>
+          <div class="inline-form">
+            <input type="number" id="hlsConcurrency" min="1" max="32" step="1" inputmode="numeric" />
+            <button class="btn btn-primary" id="saveHlsConcurrencyBtn" data-i18n="common.save">Save</button>
+          </div>
+          <p class="hint" data-i18n="settings.hls_concurrency_hint">
+            Default: 8. The value is frozen when an episode starts and applies from the next episode only. Set 1 to disable parallel HLS downloading.
+          </p>
+
           <h3 data-i18n="settings.output_format">Output Format</h3>
           <div class="control-row">
             <label class="field field-compact">
@@ -682,6 +691,14 @@
 
       <section class="settings-pane" id="pane-integrations" role="tabpanel"
         aria-labelledby="tab-integrations" tabindex="-1" hidden>
+        <section class="card">
+          <h2 data-i18n="settings.tmdb">TMDB</h2>
+          <p class="hint" data-i18n="settings.tmdb_hint">Used for movie metadata and the Upcoming watchlist. The key is stored as a secret and is never returned or exported.</p>
+          <div class="inline-form">
+            <input type="password" id="tmdbApiKey" autocomplete="new-password" placeholder="TMDB API key or read token" />
+            <button class="btn btn-primary" id="saveTmdbBtn" data-i18n="common.save">Save</button>
+          </div>
+        </section>
         <section class="card">
           <h2 data-i18n="settings.discord">Discord Request Bot</h2>
           <label class="checkbox">

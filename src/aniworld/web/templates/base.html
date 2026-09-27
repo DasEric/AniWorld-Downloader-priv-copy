@@ -54,8 +54,13 @@
       <a href="{{ url_for('pages.library') }}" class="top-bar-link" data-i18n="nav.library">Library</a>
       {% endif %}
       {% if autosync_enabled and (not auth_enabled or (current_user and current_user.role == 'admin')) %}
-      <a href="{{ url_for('pages.autosync') }}" class="top-bar-link has-ribbon">
+      <a href="{{ url_for('pages.autosync') }}" class="top-bar-link">
         <span data-i18n="nav.autosync">Auto-Sync</span>
+      </a>
+      {% endif %}
+      {% if not auth_enabled or (current_user and current_user.role == 'admin') %}
+      <a href="{{ url_for('pages.upcoming') }}" class="top-bar-link has-ribbon">
+        <span data-i18n="nav.upcoming">Upcoming</span>
         <span class="new-ribbon" aria-hidden="true">New</span>
       </a>
       {% endif %}

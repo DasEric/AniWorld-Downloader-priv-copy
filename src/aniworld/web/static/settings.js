@@ -98,6 +98,10 @@
     el("downloadPath").value = settings.download_path || "";
     el("uiLanguage").value = settings.ui_language;
     el("outputFormat").value = settings.output_format;
+    el("hlsConcurrency").value = settings.hls_concurrency || 8;
+    el("hlsConcurrency").min = settings.hls_concurrency_min || 1;
+    el("hlsConcurrency").max = settings.hls_concurrency_max || 32;
+    el("tmdbApiKey").value = settings.tmdb && settings.tmdb.key_set ? SECRET_PLACEHOLDER : "";
 
     document.querySelectorAll("[data-setting]").forEach((box) => {
       box.checked = Boolean(settings[box.dataset.setting]);
@@ -127,6 +131,14 @@
 
   el("saveDownloadPathBtn").addEventListener("click", () => {
     save({ download_path: el("downloadPath").value.trim() });
+  });
+
+  el("saveHlsConcurrencyBtn").addEventListener("click", () => {
+    save({ hls_concurrency: el("hlsConcurrency").value });
+  });
+
+  el("saveTmdbBtn").addEventListener("click", () => {
+    save({ tmdb: { api_key: el("tmdbApiKey").value } });
   });
 
   /* ===== Where a download lands =====

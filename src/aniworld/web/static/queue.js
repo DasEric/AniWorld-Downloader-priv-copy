@@ -65,6 +65,12 @@
     return Math.min(100, Math.round(((done + partial) / count) * 100));
   }
 
+  function episodePercent(item, progress) {
+    if (item.status !== "running" || !progress.active) return 0;
+    if (Number(progress.queue_id) !== Number(item.id)) return 0;
+    return Math.max(0, Math.min(100, Math.round(progress.percent || 0)));
+  }
+
   /* "bandwidth" is only populated when response bytes are measured directly.
      FFmpeg's output-file growth is deliberately not labelled as network speed. */
   function speedLabel(item, ffmpeg) {
@@ -192,6 +198,7 @@
 
   function renderItem(item, ffmpeg) {
     const percent = progressPercent(item, ffmpeg);
+    const episode = episodePercent(item, ffmpeg);
     const meta = metaLine(item);
 
     const captchaBtn =
@@ -217,10 +224,16 @@
             ${renderActions(item)}
           </div>
         </div>
-        <div class="progress-track"><div class="progress-fill" data-percent="${percent}" style="width:${percent}%"></div></div>
+        <div class="progress-caption">${t("queue.overall_progress", "Overall progress")}</div>
+        <div class="progress-track"><div class="progress-fill" data-progress="overall" data-percent="${percent}" style="width:${percent}%"></div></div>
         <div class="progress-stats"${item.status === "running" ? "" : " hidden"}>
           <span data-progress-percent>${percent}%</span>
           <span data-progress-speed>${esc(speedLabel(item, ffmpeg))}</span>
+        </div>
+        <div class="episode-progress"${item.status === "running" ? "" : " hidden"}>
+          <div class="progress-caption">${t("queue.current_episode_progress", "Current episode")}</div>
+          <div class="progress-track progress-track-episode"><div class="progress-fill progress-fill-episode" data-progress="episode" data-percent="${episode}" style="width:${episode}%"></div></div>
+          <div class="progress-stats"><span data-episode-percent>${episode}%</span><span data-episode-time>${esc(ffmpeg.time || "")}</span></div>
         </div>
         ${captchaBtn ? `<div class="action-row">${captchaBtn}</div>` : ""}
         ${renderErrors(item)}
@@ -247,8 +260,9 @@
     ]);
   }
 
-  function setProgress(node, percent) {
-    const fill = node.querySelector(".progress-fill");
+  function setProgress(node, percent, kind = "overall") {
+    const fill = node.querySelector(`[data-progress="${kind}"]`);
+    if (!fill) return;
     const previous = Number(fill.dataset.percent);
     // only animate forwards, a reset should land straight back at the start
     fill.classList.toggle("no-transition", percent < previous);
@@ -263,6 +277,10 @@
     if (!percentNode) return;
     percentNode.textContent = `${percent}%`;
     node.querySelector("[data-progress-speed]").textContent = speedLabel(item, ffmpeg);
+    const episodeNode = node.querySelector("[data-episode-percent]");
+    if (episodeNode) episodeNode.textContent = `${episodePercent(item, ffmpeg)}%`;
+    const episodeTime = node.querySelector("[data-episode-time]");
+    if (episodeTime) episodeTime.textContent = ffmpeg.time || "";
   }
 
   function paint(node, item, ffmpeg) {
@@ -274,6 +292,7 @@
     const percent = progressPercent(item, ffmpeg);
     node.querySelector(".queue-item-meta").textContent = metaLine(item);
     setProgress(node, percent);
+    setProgress(node, episodePercent(item, ffmpeg), "episode");
     setStats(node, item, ffmpeg, percent);
     return node;
   }
@@ -373,7 +392,7 @@
         return refresh();
       }
 
-      render(data.items || [], data.ffmpeg_progress || {});
+      render(data.items || [], data.episode_progress || data.ffmpeg_progress || {});
       paintControls(data.counts);
       loaded = true;
     } catch (error) {

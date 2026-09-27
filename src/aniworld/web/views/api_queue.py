@@ -104,9 +104,11 @@ def list_queue():
     from ...models.common.common import get_ffmpeg_progress
 
     args = request.args
+    progress = get_ffmpeg_progress()
     if not any(arg in args for arg in _PAGE_ARGS):
         return jsonify(
-            {"items": db.get_queue(), "ffmpeg_progress": get_ffmpeg_progress()}
+            {"items": db.get_queue(), "ffmpeg_progress": progress,
+             "episode_progress": progress}
         )
 
     status = args.get("status") or None
@@ -141,7 +143,8 @@ def list_queue():
             "limit": limit,
             "offset": offset,
             "counts": db.queue_counts(),
-            "ffmpeg_progress": get_ffmpeg_progress(),
+            "ffmpeg_progress": progress,
+            "episode_progress": progress,
         }
     )
 

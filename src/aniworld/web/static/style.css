@@ -1559,6 +1559,21 @@ body[data-site="htv"] {
   margin-top: 10px;
 }
 
+.progress-caption {
+  margin: 0.55rem 0 0.25rem;
+  color: var(--text-muted);
+  font-size: 0.72rem;
+}
+
+.progress-track-episode { height: 4px; }
+.progress-fill-episode { background: var(--success); }
+
+.upcoming-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 1rem; margin-top: 1rem; }
+.upcoming-card { display: grid; grid-template-columns: 90px 1fr; gap: 1rem; padding: 1rem; border: 1px solid var(--border); border-radius: 12px; }
+.upcoming-card img { width: 90px; border-radius: 8px; }
+.upcoming-card h3 { margin: 0; }
+.upcoming-row { display: flex; justify-content: space-between; align-items: center; gap: 1rem; padding: 0.9rem 0; border-bottom: 1px solid var(--border); }
+
 /* The width is set once per poll. Animating for exactly that long means the
    bar is always still moving when the next value lands, instead of jumping
    and then standing still. queue.js sets the duration from its interval. */

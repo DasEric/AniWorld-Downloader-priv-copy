@@ -13,6 +13,7 @@ from . import (
     api_media,
     api_queue,
     api_settings,
+    api_upcoming,
     pages,
 )
 
@@ -35,6 +36,14 @@ ADMIN_ENDPOINTS = {
     "api.delete_custom_path",
     "api.delete_library_item",
     "pages.autosync",
+    "pages.upcoming",
+    "api.upcoming_list",
+    "api.upcoming_add",
+    "api.upcoming_update",
+    "api.upcoming_delete",
+    "api.upcoming_search",
+    "api.upcoming_browse",
+    "api.upcoming_run",
     "api.autosync_status",
     "api.autosync_run",
     "api.list_series",
@@ -64,6 +73,7 @@ def register_blueprints(app):
         api_library,
         api_autosync,
         api_keys,
+        api_upcoming,
     ):
         module.register(api)
     app.register_blueprint(api)

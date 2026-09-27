@@ -9,6 +9,7 @@ import json
 
 import pytest
 
+from aniworld.models.common import common
 from aniworld.web import db, worker
 
 
@@ -123,6 +124,25 @@ def test_progress_is_visible_while_it_runs(queue_item, run_worker):
 
     run_worker(queue_id, on_download=watch)
     assert seen == [(0, "https://x/ep1"), (1, "https://x/ep2")]
+
+
+def test_hls_concurrency_change_applies_from_the_next_episode(
+    monkeypatch, queue_item, run_worker
+):
+    monkeypatch.setenv("ANIWORLD_HLS_CONCURRENCY", "8")
+    seen = []
+    queue_id = queue_item(episodes=["https://x/ep1", "https://x/ep2"])
+    db.set_queue_status(queue_id, "running")
+
+    def watch(url):
+        seen.append(common._episode_hls_concurrency())
+        if url.endswith("ep1"):
+            monkeypatch.setenv("ANIWORLD_HLS_CONCURRENCY", "10")
+            assert common._episode_hls_concurrency() == 8
+
+    run_worker(queue_id, on_download=watch)
+    assert seen == [8, 10]
+    assert common.get_ffmpeg_progress()["queue_id"] is None
 
 
 def test_a_finished_download_is_not_cancelled(queue_item, run_worker):

@@ -229,6 +229,8 @@ def _start_background_services():
     _wire_captcha_hooks()
     worker.ensure_started()
     autosync.ensure_started()
+    from . import upcoming
+    upcoming.ensure_started()
     try:
         from .discord_bot import start_if_enabled
 

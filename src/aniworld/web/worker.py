@@ -10,7 +10,7 @@ import time
 
 from ..logger import get_logger
 from ..providers import resolve_provider
-from . import db, paths
+from . import db, paths, settings_store
 from .media import mangafire_format
 
 logger = get_logger(__name__)
@@ -139,12 +139,18 @@ def _process(item):
         try:
             db.update_queue_progress(queue_id, index, url)
             provider, episode = _build_episode(url, extra, item, selected_path)
+            from ..models.common.common import (
+                clear_episode_download_context,
+                set_episode_download_context,
+            )
+            set_episode_download_context(queue_id, index, settings_store.hls_concurrency())
             # Tells the captcha module to stream its browser into this queue item
             captcha._local.queue_id = queue_id
             try:
                 episode.download()
             finally:
                 captcha._local.queue_id = None
+                clear_episode_download_context()
         except Exception as exc:
             captcha._local.queue_id = None
             # A force cancel kills the download on purpose. Whatever it raised
@@ -175,6 +181,8 @@ def _process(item):
             db.set_queue_status(
                 queue_id, "completed" if everything_done else "cancelled"
             )
+            if item.get("source") == "upcoming":
+                db.finish_upcoming_queue(queue_id, "completed" if everything_done else "cancelled")
             if everything_done and item.get("source") == "discord":
                 _notify_discord(item)
             return
@@ -182,6 +190,9 @@ def _process(item):
     db.update_queue_progress(queue_id, len(entries), "")
     status = "failed" if errors and len(errors) == len(entries) else "completed"
     db.set_queue_status(queue_id, status)
+
+    if item.get("source") == "upcoming":
+        db.finish_upcoming_queue(queue_id, status)
 
     if status == "completed" and item.get("source") == "discord":
         _notify_discord(item)
