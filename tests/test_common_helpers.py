@@ -6,8 +6,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from aniworld.models.aniworld_to.episode import AniworldEpisode
-from aniworld.models.common.common import (
+from h0melab.models.common.common import (
     DownloadCancelled,
     _finalize_resolution_naming,
     _parse_ffmpeg_time,
@@ -21,6 +20,7 @@ from aniworld.models.common.common import (
     get_ffmpeg_progress,
     movie_folder_enabled,
 )
+from h0melab.models.h0melab_to.episode import AniworldEpisode
 
 
 # ---------------------------------------------------------------------------
@@ -62,7 +62,7 @@ def test_a_cleaned_title_is_usable_as_a_folder_name(tmp_path):
 
 def test_container_resolution_uses_the_only_video_height(monkeypatch):
     monkeypatch.setattr(
-        "aniworld.models.common.common.subprocess.run",
+        "h0melab.models.common.common.subprocess.run",
         lambda *_args, **_kwargs: SimpleNamespace(
             stderr="Stream #0:0: Video: h264, yuv420p, 1280x720\n"
         ),
@@ -72,7 +72,7 @@ def test_container_resolution_uses_the_only_video_height(monkeypatch):
 
 def test_container_resolution_is_unknown_with_multiple_video_streams(monkeypatch):
     monkeypatch.setattr(
-        "aniworld.models.common.common.subprocess.run",
+        "h0melab.models.common.common.subprocess.run",
         lambda *_args, **_kwargs: SimpleNamespace(
             stderr=(
                 "Stream #0:0: Video: h264, yuv420p, 1280x720\n"
@@ -85,7 +85,7 @@ def test_container_resolution_is_unknown_with_multiple_video_streams(monkeypatch
 
 def test_resolution_placeholder_is_used_in_aniworld_filename(monkeypatch, tmp_path):
     monkeypatch.setenv(
-        "ANIWORLD_NAMING_TEMPLATE",
+        "H0MELAB_NAMING_TEMPLATE",
         "{title}.S{season}E{episode}.{resolution}.{language}.mp4",
     )
     episode = AniworldEpisode(
@@ -104,7 +104,7 @@ def test_resolution_placeholder_is_used_in_aniworld_filename(monkeypatch, tmp_pa
 
 def test_pending_resolution_is_hidden_from_progress(monkeypatch, tmp_path):
     monkeypatch.setenv(
-        "ANIWORLD_NAMING_TEMPLATE",
+        "H0MELAB_NAMING_TEMPLATE",
         "{title}.S{season}E{episode}.{resolution} - {language}.mkv",
     )
     episode = AniworldEpisode(
@@ -122,9 +122,7 @@ def test_pending_resolution_is_hidden_from_progress(monkeypatch, tmp_path):
 
 
 def test_finished_download_is_renamed_with_its_resolution(monkeypatch, tmp_path):
-    monkeypatch.setenv(
-        "ANIWORLD_NAMING_TEMPLATE", "{title}.{resolution}.{language}.mkv"
-    )
+    monkeypatch.setenv("H0MELAB_NAMING_TEMPLATE", "{title}.{resolution}.{language}.mkv")
     episode = AniworldEpisode(
         "https://aniworld.to/anime/stream/seriesname/staffel-1/episode-1",
         series=SimpleNamespace(title_cleaned="Seriesname", release_year="", imdb=""),
@@ -137,7 +135,7 @@ def test_finished_download_is_renamed_with_its_resolution(monkeypatch, tmp_path)
     unknown_path = episode._episode_path
     unknown_path.write_bytes(b"video")
     monkeypatch.setattr(
-        "aniworld.models.common.common.subprocess.run",
+        "h0melab.models.common.common.subprocess.run",
         lambda *_args, **_kwargs: SimpleNamespace(
             stderr="Stream #0:0: Video: h264, yuv420p, 1280x720\n"
         ),
@@ -221,7 +219,7 @@ def test_the_base_survives_while_a_season_remains(tmp_path):
 
 
 def test_the_protected_folder_is_never_removed(tmp_path):
-    """With ANIWORLD_MOVIE_FOLDER=0 a movie's folder is the download root."""
+    """With H0MELAB_MOVIE_FOLDER=0 a movie's folder is the download root."""
     root = tmp_path / "movie-root"
     root.mkdir()
     _remove_empty_dirs(root, root, protected=str(root))
@@ -254,12 +252,12 @@ def test_movies_get_their_own_folder_by_default():
 
 
 def test_the_movie_folder_can_be_turned_off(monkeypatch):
-    monkeypatch.setenv("ANIWORLD_MOVIE_FOLDER", "0")
+    monkeypatch.setenv("H0MELAB_MOVIE_FOLDER", "0")
     assert movie_folder_enabled() is False
 
 
 def test_any_other_value_keeps_it_on(monkeypatch):
-    monkeypatch.setenv("ANIWORLD_MOVIE_FOLDER", "1")
+    monkeypatch.setenv("H0MELAB_MOVIE_FOLDER", "1")
     assert movie_folder_enabled() is True
 
 
@@ -325,7 +323,7 @@ def test_a_cancel_is_still_caught_by_a_broad_handler():
 def test_the_version_is_a_real_version():
     from packaging.version import Version
 
-    from aniworld.web.version import get_version
+    from h0melab.web.version import get_version
 
     version = get_version()
     assert version, "the navbar would show an empty version"

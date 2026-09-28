@@ -1,4 +1,4 @@
-from aniworld.extractors.provider.hanime_tv import fetch_hanime_genres, search_hanime
+from h0melab.extractors.provider.hanime_tv import fetch_hanime_genres, search_hanime
 
 # limit caps the result count; None keeps the site's existing scope, 0 skips fetching.
 # Available genre tags (09/2026 as of right now):

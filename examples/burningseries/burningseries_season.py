@@ -1,4 +1,4 @@
-from aniworld.models import BurningSeriesSeries
+from h0melab.models import BurningSeriesSeries
 
 url = "https://bs.to/serie/Breaking-Bad"
 

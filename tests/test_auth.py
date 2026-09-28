@@ -2,7 +2,7 @@
 
 import pytest
 
-from aniworld.web import db
+from h0melab.web import db
 
 
 def login(client, username="root", password="hunter2hunter2"):

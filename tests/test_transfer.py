@@ -4,7 +4,7 @@ import sys
 from pathlib import Path
 from types import SimpleNamespace
 
-from aniworld.models.common.transfer import _format_selector, download_with_ytdlp
+from h0melab.models.common.transfer import _format_selector, download_with_ytdlp
 
 
 def test_ytdlp_uses_requested_fragment_concurrency(monkeypatch, tmp_path):

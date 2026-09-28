@@ -10,19 +10,19 @@ import shutil
 import tempfile
 from pathlib import Path
 
-# Has to happen before aniworld is imported: config.py reads this at import
+# Has to happen before h0melab is imported: config.py reads this at import
 # time to decide where .env, the database and the flask secret live.
-_SANDBOX = Path(tempfile.mkdtemp(prefix="aniworld-tests-"))
-os.environ["ANIWORLD_INSTALL_FOLDER"] = str(_SANDBOX / "config")
+_SANDBOX = Path(tempfile.mkdtemp(prefix="h0melab-tests-"))
+os.environ["H0MELAB_INSTALL_FOLDER"] = str(_SANDBOX / "config")
 
 import pytest
 
-from aniworld.web import app as web_app
-from aniworld.web import db
+from h0melab.web import app as web_app
+from h0melab.web import db
 
 # Prefixes wiped between tests. Settings live in the environment, so without
 # this a test that flips a setting would change the next one's behaviour.
-_OWNED_PREFIXES = ("ANIWORLD_", "MANGAFIRE_")
+_OWNED_PREFIXES = ("H0MELAB_", "MANGAFIRE_")
 
 
 def pytest_sessionfinish(session, exitstatus):
@@ -54,11 +54,11 @@ def clean_env(monkeypatch, tmp_path):
     for key in list(os.environ):
         if key.startswith(_OWNED_PREFIXES):
             monkeypatch.delenv(key, raising=False)
-    monkeypatch.setenv("ANIWORLD_INSTALL_FOLDER", str(_SANDBOX / "config"))
+    monkeypatch.setenv("H0MELAB_INSTALL_FOLDER", str(_SANDBOX / "config"))
 
     downloads = tmp_path / "downloads"
     downloads.mkdir()
-    monkeypatch.setenv("ANIWORLD_DOWNLOAD_PATH", str(downloads))
+    monkeypatch.setenv("H0MELAB_DOWNLOAD_PATH", str(downloads))
     return downloads
 
 
@@ -74,7 +74,7 @@ def no_background_threads(monkeypatch):
     then failed. It shows up as an unrelated test failing on the queue order,
     on a different test each run, and only when the timing lines up.
     """
-    from aniworld.web import autosync, worker
+    from h0melab.web import autosync, worker
 
     monkeypatch.setattr(worker, "ensure_started", lambda: None)
     monkeypatch.setattr(autosync, "ensure_started", lambda: None)
@@ -87,7 +87,7 @@ def fresh_autosync_anchor(monkeypatch):
     That moment is remembered in a module global, so without this a test that
     looks at the schedule would fix the anchor for every test after it.
     """
-    from aniworld.web import autosync
+    from h0melab.web import autosync
 
     monkeypatch.setattr(autosync, "_anchored_at", None)
 
@@ -101,7 +101,7 @@ def downloads(clean_env):
 @pytest.fixture(autouse=True)
 def fresh_db(clean_env, monkeypatch, tmp_path):
     """A brand new database per test."""
-    monkeypatch.setattr(db, "DB_PATH", tmp_path / "aniworld.db")
+    monkeypatch.setattr(db, "DB_PATH", tmp_path / "h0melab.db")
     monkeypatch.setattr(db, "_initialized", False)
     db.init_db()
     yield
@@ -183,7 +183,7 @@ def episode_file(downloads):
 @pytest.fixture
 def api_key():
     """Mint a working API key and return (raw key, id)."""
-    from aniworld.web import apikeys
+    from h0melab.web import apikeys
 
     def factory(scope="write", name="test key", expires_days=None):
         raw = apikeys.generate()

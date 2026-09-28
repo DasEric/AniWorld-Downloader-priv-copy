@@ -4,9 +4,9 @@ import os
 
 import pytest
 
-from aniworld.web import settings_store
-from aniworld.web.media import WORKING_PROVIDERS
-from aniworld.web.settings_store import SettingsError, update_settings
+from h0melab.web import settings_store
+from h0melab.web.media import WORKING_PROVIDERS
+from h0melab.web.settings_store import SettingsError, update_settings
 
 
 # ---------------------------------------------------------------------------
@@ -34,7 +34,7 @@ def test_read_settings_lists_the_choices():
 
 
 def test_read_settings_never_leaks_the_discord_token(monkeypatch):
-    monkeypatch.setenv("ANIWORLD_DISCORD_TOKEN", "super-secret-token")
+    monkeypatch.setenv("H0MELAB_DISCORD_TOKEN", "super-secret-token")
     discord = settings_store.read_settings()["discord"]
     assert discord["token_set"] is True
     assert "token" not in discord
@@ -65,17 +65,17 @@ def test_tmdb_key_is_never_returned_or_exported(monkeypatch):
 @pytest.mark.parametrize(
     "field,env_key",
     [
-        ("lang_separation", "ANIWORLD_LANG_SEPARATION"),
-        ("disable_english_sub", "ANIWORLD_DISABLE_ENGLISH_SUB"),
-        ("enable_htv", "ANIWORLD_ENABLE_HTV"),
-        ("enable_burningseries", "ANIWORLD_ENABLE_BURNINGSERIES"),
-        ("enable_kinox", "ANIWORLD_ENABLE_KINOX"),
-        ("enable_library", "ANIWORLD_ENABLE_LIBRARY"),
-        ("enable_autosync", "ANIWORLD_ENABLE_AUTOSYNC"),
-        ("enable_aniworld", "ANIWORLD_ENABLE_ANIWORLD"),
-        ("enable_sto", "ANIWORLD_ENABLE_STO"),
-        ("enable_mangafire", "ANIWORLD_ENABLE_MANGAFIRE"),
-        ("movie_folder", "ANIWORLD_MOVIE_FOLDER"),
+        ("lang_separation", "H0MELAB_LANG_SEPARATION"),
+        ("disable_english_sub", "H0MELAB_DISABLE_ENGLISH_SUB"),
+        ("enable_htv", "H0MELAB_ENABLE_HTV"),
+        ("enable_burningseries", "H0MELAB_ENABLE_BURNINGSERIES"),
+        ("enable_kinox", "H0MELAB_ENABLE_KINOX"),
+        ("enable_library", "H0MELAB_ENABLE_LIBRARY"),
+        ("enable_autosync", "H0MELAB_ENABLE_AUTOSYNC"),
+        ("enable_aniworld", "H0MELAB_ENABLE_ANIWORLD"),
+        ("enable_sto", "H0MELAB_ENABLE_STO"),
+        ("enable_mangafire", "H0MELAB_ENABLE_MANGAFIRE"),
+        ("movie_folder", "H0MELAB_MOVIE_FOLDER"),
     ],
 )
 def test_every_toggle_round_trips(field, env_key):
@@ -95,12 +95,12 @@ def test_every_toggle_round_trips(field, env_key):
 # checkbox. Some sites start off, the rest start on.
 # ---------------------------------------------------------------------------
 def test_every_site_can_be_switched_off():
-    from aniworld.web.media import SITE_KEYS
+    from h0melab.web.media import SITE_KEYS
 
     for site in SITE_KEYS:
         update_settings({f"enable_{site}": False})
         assert settings_store.site_enabled(site) is False, site
-        assert os.environ[f"ANIWORLD_ENABLE_{site.upper()}"] == "0"
+        assert os.environ[f"H0MELAB_ENABLE_{site.upper()}"] == "0"
 
         update_settings({f"enable_{site}": True})
         assert settings_store.site_enabled(site) is True, site
@@ -139,7 +139,7 @@ def test_the_page_is_told_which_sites_exist():
 
 def test_the_last_site_cannot_be_switched_off():
     """The home page with no tabs at all is not a state worth reaching."""
-    from aniworld.web.media import SITE_KEYS
+    from h0melab.web.media import SITE_KEYS
 
     with pytest.raises(SettingsError, match="At least one site"):
         update_settings({f"enable_{site}": False for site in SITE_KEYS})
@@ -148,7 +148,7 @@ def test_the_last_site_cannot_be_switched_off():
 
 
 def test_switching_off_all_but_one_is_fine():
-    from aniworld.web.media import SITE_KEYS
+    from h0melab.web.media import SITE_KEYS
 
     update_settings({f"enable_{site}": site == "aniworld" for site in SITE_KEYS})
     assert settings_store.enabled_sites()["aniworld"] is True
@@ -157,10 +157,10 @@ def test_switching_off_all_but_one_is_fine():
 
 def test_an_unrelated_setting_still_saves_with_every_site_off(monkeypatch):
     """A hand-edited .env is the user's business and must not block the page."""
-    from aniworld.web.media import SITE_KEYS
+    from h0melab.web.media import SITE_KEYS
 
     for site in SITE_KEYS:
-        monkeypatch.setenv(f"ANIWORLD_ENABLE_{site.upper()}", "0")
+        monkeypatch.setenv(f"H0MELAB_ENABLE_{site.upper()}", "0")
 
     update_settings({"ui_language": "de"})
     assert settings_store.ui_language() == "de"
@@ -195,7 +195,7 @@ def test_auto_sync_runs_once_a_day_unless_told_otherwise():
 
 def test_the_mode_can_be_switched():
     update_settings({"autosync_mode": "cron"})
-    assert os.environ["ANIWORLD_AUTOSYNC_MODE"] == "cron"
+    assert os.environ["H0MELAB_AUTOSYNC_MODE"] == "cron"
     assert settings_store.read_settings()["autosync_mode"] == "cron"
 
 
@@ -209,7 +209,7 @@ def test_an_unknown_mode_is_rejected():
 )
 def test_an_interval_is_stored_the_way_it_parses(written, stored):
     update_settings({"autosync_interval": written})
-    assert os.environ["ANIWORLD_AUTOSYNC_INTERVAL"] == stored
+    assert os.environ["H0MELAB_AUTOSYNC_INTERVAL"] == stored
     assert settings_store.read_settings()["autosync_interval"] == stored
 
 
@@ -225,12 +225,12 @@ def test_a_nonsense_interval_is_rejected():
 
 def test_fixed_times_can_be_written_as_cron():
     update_settings({"autosync_cron": "0 22 * * 1,5"})
-    assert os.environ["ANIWORLD_AUTOSYNC_CRON"] == "0 22 * * 1,5"
+    assert os.environ["H0MELAB_AUTOSYNC_CRON"] == "0 22 * * 1,5"
 
 
 def test_fixed_times_can_be_written_as_a_sentence():
     update_settings({"autosync_cron": "every monday and friday at 10pm"})
-    assert os.environ["ANIWORLD_AUTOSYNC_CRON"] == "0 22 * * 1,5"
+    assert os.environ["H0MELAB_AUTOSYNC_CRON"] == "0 22 * * 1,5"
 
 
 def test_a_nonsense_schedule_is_rejected():
@@ -246,7 +246,7 @@ def test_a_rejected_schedule_leaves_the_old_one():
 
 
 def test_the_schedule_is_described_for_the_page(monkeypatch):
-    monkeypatch.setenv("ANIWORLD_AUTOSYNC_MODE", "cron")
+    monkeypatch.setenv("H0MELAB_AUTOSYNC_MODE", "cron")
     update_settings({"autosync_cron": "every day at 08:00, 22:30"})
     assert settings_store.autosync_schedule_description() == (
         "Every day at 08:00 and 22:30"
@@ -254,16 +254,16 @@ def test_the_schedule_is_described_for_the_page(monkeypatch):
 
 
 def test_the_description_follows_the_ui_language(monkeypatch):
-    monkeypatch.setenv("ANIWORLD_UI_LANGUAGE", "de")
+    monkeypatch.setenv("H0MELAB_UI_LANGUAGE", "de")
     assert settings_store.autosync_schedule_description() == "Jeden Tag"
 
 
 @pytest.mark.parametrize(
     "key,value",
     [
-        ("ANIWORLD_AUTOSYNC_MODE", "yearly"),
-        ("ANIWORLD_AUTOSYNC_INTERVAL", "whenever"),
-        ("ANIWORLD_AUTOSYNC_CRON", "0 99 * * *"),
+        ("H0MELAB_AUTOSYNC_MODE", "yearly"),
+        ("H0MELAB_AUTOSYNC_INTERVAL", "whenever"),
+        ("H0MELAB_AUTOSYNC_CRON", "0 99 * * *"),
     ],
 )
 def test_a_hand_edited_env_never_breaks_the_worker(monkeypatch, key, value):
@@ -310,7 +310,7 @@ def test_unsupported_ui_languages_are_refused(language):
 
 
 def test_a_junk_language_in_the_environment_falls_back(monkeypatch):
-    monkeypatch.setenv("ANIWORLD_UI_LANGUAGE", "klingon")
+    monkeypatch.setenv("H0MELAB_UI_LANGUAGE", "klingon")
     assert settings_store.ui_language() == "en"
 
 
@@ -331,7 +331,7 @@ def test_unsupported_formats_are_refused(fmt):
 
 def test_changing_the_format_only_touches_the_extension():
     update_settings({"output_format": "mp4"})
-    template = os.environ["ANIWORLD_NAMING_TEMPLATE"]
+    template = os.environ["H0MELAB_NAMING_TEMPLATE"]
     assert template.endswith(".mp4")
     assert "{title}" in template and "Season {season}" in template
 
@@ -340,29 +340,27 @@ def test_the_format_survives_a_round_trip():
     update_settings({"output_format": "mp4"})
     update_settings({"output_format": "mkv"})
     assert settings_store.output_format() == "mkv"
-    assert os.environ["ANIWORLD_NAMING_TEMPLATE"].endswith(".mkv")
+    assert os.environ["H0MELAB_NAMING_TEMPLATE"].endswith(".mkv")
 
 
 def test_a_quoted_template_stays_quoted(monkeypatch):
     monkeypatch.setenv(
-        "ANIWORLD_NAMING_TEMPLATE", '"{title}/{title} S{season}E{episode}.mkv"'
+        "H0MELAB_NAMING_TEMPLATE", '"{title}/{title} S{season}E{episode}.mkv"'
     )
     update_settings({"output_format": "mp4"})
-    template = os.environ["ANIWORLD_NAMING_TEMPLATE"]
+    template = os.environ["H0MELAB_NAMING_TEMPLATE"]
     assert template.startswith('"') and template.endswith('"')
     assert settings_store.output_format() == "mp4"
 
 
 def test_a_template_without_an_extension_reads_as_mkv(monkeypatch):
-    monkeypatch.setenv(
-        "ANIWORLD_NAMING_TEMPLATE", "{title}/{title} S{season}E{episode}"
-    )
+    monkeypatch.setenv("H0MELAB_NAMING_TEMPLATE", "{title}/{title} S{season}E{episode}")
     assert settings_store.output_format() == "mkv"
 
 
 def test_a_dot_in_the_folder_does_not_confuse_the_format(monkeypatch):
     monkeypatch.setenv(
-        "ANIWORLD_NAMING_TEMPLATE", "{title} (2024)/Season 1/{title} S01E01.mp4"
+        "H0MELAB_NAMING_TEMPLATE", "{title} (2024)/Season 1/{title} S01E01.mp4"
     )
     assert settings_store.output_format() == "mp4"
 
@@ -477,7 +475,7 @@ def test_other_settings_do_not_report_a_discord_change():
 def test_the_placeholder_does_not_overwrite_the_token():
     update_settings({"discord": {"token": "real-token"}})
     update_settings({"discord": {"token": settings_store.SECRET_PLACEHOLDER}})
-    assert os.environ["ANIWORLD_DISCORD_TOKEN"] == "real-token"
+    assert os.environ["H0MELAB_DISCORD_TOKEN"] == "real-token"
 
 
 def test_the_token_can_be_cleared():
@@ -534,11 +532,11 @@ def test_all_panel_settings_are_written_to_the_persistent_file(monkeypatch, tmp_
     )
     values = dotenv_values(stored)
 
-    assert values["ANIWORLD_ENABLE_HTV"] == "1"
-    assert values["ANIWORLD_UI_LANGUAGE"] == "de"
-    assert values["ANIWORLD_NAMING_TEMPLATE"].endswith(".mp4")
-    assert values["ANIWORLD_DISCORD_BOT_ENABLED"] == "1"
-    assert values["ANIWORLD_DISCORD_TOKEN"] == "persisted token #1"
+    assert values["H0MELAB_ENABLE_HTV"] == "1"
+    assert values["H0MELAB_UI_LANGUAGE"] == "de"
+    assert values["H0MELAB_NAMING_TEMPLATE"].endswith(".mp4")
+    assert values["H0MELAB_DISCORD_BOT_ENABLED"] == "1"
+    assert values["H0MELAB_DISCORD_TOKEN"] == "persisted token #1"
 
 
 def test_output_format_is_restored_from_disk_after_a_restart(monkeypatch, tmp_path):
@@ -550,14 +548,14 @@ def test_output_format_is_restored_from_disk_after_a_restart(monkeypatch, tmp_pa
 
     # A fresh process starts with its deployment/image environment, then the
     # panel-owned file is loaded with priority.
-    monkeypatch.setenv("ANIWORLD_NAMING_TEMPLATE", "{title}.mkv")
+    monkeypatch.setenv("H0MELAB_NAMING_TEMPLATE", "{title}.mkv")
     load_dotenv(stored, override=True)
 
     assert settings_store.output_format() == "mp4"
 
 
 def test_a_persistence_failure_does_not_apply_a_runtime_only_change(monkeypatch):
-    from aniworld import env
+    from h0melab import env
 
     def fail(*_args, **_kwargs):
         raise OSError("read-only filesystem")
@@ -573,12 +571,12 @@ def test_a_persistence_failure_does_not_apply_a_runtime_only_change(monkeypatch)
 # Language defaults
 # ---------------------------------------------------------------------------
 def test_the_default_language_can_be_set(monkeypatch):
-    monkeypatch.setenv("ANIWORLD_LANGUAGE", "German Sub")
+    monkeypatch.setenv("H0MELAB_LANGUAGE", "German Sub")
     assert settings_store.default_language() == "German Sub"
 
 
 def test_a_junk_default_language_falls_back(monkeypatch):
-    monkeypatch.setenv("ANIWORLD_LANGUAGE", "Pig Latin")
+    monkeypatch.setenv("H0MELAB_LANGUAGE", "Pig Latin")
     assert settings_store.default_language() == "German Dub"
 
 
@@ -600,7 +598,7 @@ PREVIEW_TITLE = "KonoSuba God\u2019s blessing on this wonderful world!"
 # ---------------------------------------------------------------------------
 def test_the_preview_puts_the_path_and_the_template_together(monkeypatch, tmp_path):
     """The full cleaned title and the year range, the way a real page gives them."""
-    monkeypatch.setenv("ANIWORLD_DOWNLOAD_PATH", str(tmp_path))
+    monkeypatch.setenv("H0MELAB_DOWNLOAD_PATH", str(tmp_path))
     preview = settings_store.preview_paths()
     assert preview["episode"] == str(
         tmp_path
@@ -617,9 +615,9 @@ def test_the_preview_is_built_by_the_downloader_itself(monkeypatch, tmp_path):
     """
     from types import SimpleNamespace
 
-    from aniworld.models.aniworld_to.episode import AniworldEpisode
+    from h0melab.models.h0melab_to.episode import AniworldEpisode
 
-    monkeypatch.setenv("ANIWORLD_DOWNLOAD_PATH", str(tmp_path))
+    monkeypatch.setenv("H0MELAB_DOWNLOAD_PATH", str(tmp_path))
     real = AniworldEpisode(
         url=settings_store._PREVIEW_URL,
         series=SimpleNamespace(
@@ -637,9 +635,9 @@ def test_the_preview_is_built_by_the_downloader_itself(monkeypatch, tmp_path):
 
 def test_a_movie_lands_where_the_movie_sites_put_it(monkeypatch, tmp_path):
     """FilmPalast builds a movie path its own way, and this has to match it."""
-    from aniworld.models.filmpalast_to.episode import FilmPalastEpisode
+    from h0melab.models.filmpalast_to.episode import FilmPalastEpisode
 
-    monkeypatch.setenv("ANIWORLD_DOWNLOAD_PATH", str(tmp_path))
+    monkeypatch.setenv("H0MELAB_DOWNLOAD_PATH", str(tmp_path))
     real = FilmPalastEpisode(
         url="https://filmpalast.to/stream/your-name", selected_path=str(tmp_path)
     )
@@ -653,15 +651,15 @@ def test_a_movie_lands_where_the_movie_sites_put_it(monkeypatch, tmp_path):
 
 def test_a_movie_does_not_use_the_template(monkeypatch, tmp_path):
     """Movies get "Title (Year)" whatever the template says, plus its extension."""
-    monkeypatch.setenv("ANIWORLD_DOWNLOAD_PATH", str(tmp_path))
-    monkeypatch.setenv("ANIWORLD_NAMING_TEMPLATE", "{title}/S{season}/{title}.mp4")
+    monkeypatch.setenv("H0MELAB_DOWNLOAD_PATH", str(tmp_path))
+    monkeypatch.setenv("H0MELAB_NAMING_TEMPLATE", "{title}/S{season}/{title}.mp4")
     assert settings_store.preview_paths()["movie"] == str(
         tmp_path / "Your Name (2016)" / "Your Name (2016).mp4"
     )
 
 
 def test_a_movie_without_its_own_folder(monkeypatch, tmp_path):
-    monkeypatch.setenv("ANIWORLD_DOWNLOAD_PATH", str(tmp_path))
+    monkeypatch.setenv("H0MELAB_DOWNLOAD_PATH", str(tmp_path))
     update_settings({"movie_folder": False})
     assert settings_store.preview_paths()["movie"] == str(
         tmp_path / "Your Name (2016).mkv"
@@ -669,23 +667,23 @@ def test_a_movie_without_its_own_folder(monkeypatch, tmp_path):
 
 
 def test_the_preview_follows_the_language_folders(monkeypatch, tmp_path):
-    monkeypatch.setenv("ANIWORLD_DOWNLOAD_PATH", str(tmp_path))
+    monkeypatch.setenv("H0MELAB_DOWNLOAD_PATH", str(tmp_path))
     update_settings({"lang_separation": True})
     for path in settings_store.preview_paths().values():
         assert str(tmp_path / "german-dub") in path
 
 
 def test_a_template_of_two_parts_has_no_season_folder(monkeypatch, tmp_path):
-    monkeypatch.setenv("ANIWORLD_DOWNLOAD_PATH", str(tmp_path))
-    monkeypatch.setenv("ANIWORLD_NAMING_TEMPLATE", "{title}/{title} E{episode}.mkv")
+    monkeypatch.setenv("H0MELAB_DOWNLOAD_PATH", str(tmp_path))
+    monkeypatch.setenv("H0MELAB_NAMING_TEMPLATE", "{title}/{title} E{episode}.mkv")
     assert settings_store.preview_paths()["episode"] == str(
         tmp_path / PREVIEW_TITLE / f"{PREVIEW_TITLE} E003.mkv"
     )
 
 
 def test_a_template_of_one_part_is_a_file_in_the_root(monkeypatch, tmp_path):
-    monkeypatch.setenv("ANIWORLD_DOWNLOAD_PATH", str(tmp_path))
-    monkeypatch.setenv("ANIWORLD_NAMING_TEMPLATE", "{title} S{season}E{episode}.mkv")
+    monkeypatch.setenv("H0MELAB_DOWNLOAD_PATH", str(tmp_path))
+    monkeypatch.setenv("H0MELAB_NAMING_TEMPLATE", "{title} S{season}E{episode}.mkv")
     assert settings_store.preview_paths()["episode"] == str(
         tmp_path / f"{PREVIEW_TITLE} S01E003.mkv"
     )
@@ -693,8 +691,8 @@ def test_a_template_of_one_part_is_a_file_in_the_root(monkeypatch, tmp_path):
 
 def test_the_percent_style_placeholders_are_filled_in_too(monkeypatch, tmp_path):
     """The downloader accepts %title%, so the preview has to as well."""
-    monkeypatch.setenv("ANIWORLD_DOWNLOAD_PATH", str(tmp_path))
-    monkeypatch.setenv("ANIWORLD_NAMING_TEMPLATE", "%title% S%season%E%episode%.mkv")
+    monkeypatch.setenv("H0MELAB_DOWNLOAD_PATH", str(tmp_path))
+    monkeypatch.setenv("H0MELAB_NAMING_TEMPLATE", "%title% S%season%E%episode%.mkv")
     assert settings_store.preview_paths()["episode"].endswith(
         f"{PREVIEW_TITLE} S01E003.mkv"
     )
@@ -702,8 +700,8 @@ def test_the_percent_style_placeholders_are_filled_in_too(monkeypatch, tmp_path)
 
 def test_a_placeholder_no_download_can_fill_is_reported(monkeypatch, tmp_path):
     """The downloader raises on this too, so the preview is where you find out."""
-    monkeypatch.setenv("ANIWORLD_DOWNLOAD_PATH", str(tmp_path))
-    monkeypatch.setenv("ANIWORLD_NAMING_TEMPLATE", "{nope}/{title}.mkv")
+    monkeypatch.setenv("H0MELAB_DOWNLOAD_PATH", str(tmp_path))
+    monkeypatch.setenv("H0MELAB_NAMING_TEMPLATE", "{nope}/{title}.mkv")
 
     preview = settings_store.preview_paths()
     assert "{nope}" in preview["error"]

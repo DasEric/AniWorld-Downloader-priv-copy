@@ -4,8 +4,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from aniworld.config import GLOBAL_SESSION, STO_DOMAINS, STO_IP
-from aniworld.models.s_to import http
+from h0melab.config import GLOBAL_SESSION, STO_DOMAINS, STO_IP
+from h0melab.models.s_to import http
 
 
 class FakeSession:

@@ -5,8 +5,8 @@ from pathlib import Path
 
 from dotenv import dotenv_values
 
-from aniworld import env
-from aniworld.web import db
+from h0melab import env
+from h0melab.web import db
 
 
 def test_v1_environment_directory_and_unknown_values_are_preserved(

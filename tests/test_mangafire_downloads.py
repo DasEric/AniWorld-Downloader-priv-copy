@@ -9,7 +9,7 @@ from zipfile import ZipFile
 
 import pytest
 
-from aniworld.models.mangafire_to import series as manga
+from h0melab.models.mangafire_to import series as manga
 
 
 @cache

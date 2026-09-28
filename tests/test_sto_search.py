@@ -3,8 +3,8 @@ from types import SimpleNamespace
 import niquests
 import pytest
 
-from aniworld.models.s_to import http
-from aniworld.search import query_s_to
+from h0melab.models.s_to import http
+from h0melab.search import query_s_to
 
 
 def search_page(*slugs, next_url=None):

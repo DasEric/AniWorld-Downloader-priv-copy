@@ -1,4 +1,4 @@
-from aniworld.models import MegaKinoEpisode
+from h0melab.models import MegaKinoEpisode
 
 test_url = "https://megakino8.com/films/205-deadpool.html"
 movie = MegaKinoEpisode(test_url)

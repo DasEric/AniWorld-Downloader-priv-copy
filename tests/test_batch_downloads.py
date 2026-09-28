@@ -8,7 +8,7 @@ disagreed about what one failure meant.
 
 import pytest
 
-from aniworld.models.common.batch import _label, run_each
+from h0melab.models.common.batch import _label, run_each
 
 
 class FakeEpisode:
@@ -136,7 +136,7 @@ def test_no_season_still_loops_episodes_unguarded():
     """A provider added later must not reintroduce the bug."""
     from pathlib import Path
 
-    models = Path(__file__).resolve().parent.parent / "src" / "aniworld" / "models"
+    models = Path(__file__).resolve().parent.parent / "src" / "h0melab" / "models"
     offenders = []
     for path in models.rglob("*.py"):
         text = path.read_text(encoding="utf-8")
@@ -147,7 +147,7 @@ def test_no_season_still_loops_episodes_unguarded():
 
 # ---------------------------------------------------------------------------
 # Series must delegate to Season, not loop episodes itself (issue #274,
-# follow-up: s_to, hanime_tv and aniworld_to still reimplemented the loop
+# follow-up: s_to, hanime_tv and h0melab_to still reimplemented the loop
 # at the Series level, bypassing the run_each() guard entirely)
 # ---------------------------------------------------------------------------
 class FakeSeason:
@@ -168,17 +168,17 @@ class FakeSeason:
 
 _SERIES_PROVIDERS = [
     (
-        "aniworld.models.aniworld_to.series",
+        "h0melab.models.h0melab_to.series",
         "AniworldSeries",
         "https://aniworld.to/anime/stream/example-series",
     ),
     (
-        "aniworld.models.s_to.series",
+        "h0melab.models.s_to.series",
         "SerienstreamSeries",
         "https://serienstream.to/serie/example-series",
     ),
     (
-        "aniworld.models.hanime_tv.series",
+        "h0melab.models.hanime_tv.series",
         "HanimeTVSeries",
         "https://hanime.tv/videos/hentai/example-video-1",
     ),
@@ -217,7 +217,7 @@ def test_no_series_still_loops_season_episodes_unguarded():
     season.download()/.watch()/.syncplay()."""
     from pathlib import Path
 
-    models = Path(__file__).resolve().parent.parent / "src" / "aniworld" / "models"
+    models = Path(__file__).resolve().parent.parent / "src" / "h0melab" / "models"
     offenders = []
     for path in models.rglob("*.py"):
         text = path.read_text(encoding="utf-8")

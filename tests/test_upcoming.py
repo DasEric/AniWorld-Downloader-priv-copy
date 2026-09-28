@@ -2,7 +2,7 @@
 
 from types import SimpleNamespace
 
-from aniworld.web import db, tmdb, upcoming
+from h0melab.web import db, tmdb, upcoming
 
 MOVIE = {
     "tmdb_id": 42,
@@ -27,7 +27,7 @@ def test_upcoming_page_uses_the_same_layout_language_as_autosync(client):
 
 def test_tmdb_http_error_does_not_leak_v3_key(monkeypatch):
     secret = "1234567890abcdef1234567890abcdef"
-    monkeypatch.setenv("ANIWORLD_TMDB_API_KEY", secret)
+    monkeypatch.setenv("H0MELAB_TMDB_API_KEY", secret)
     response = SimpleNamespace(status_code=500)
     monkeypatch.setattr(tmdb.requests, "get", lambda *args, **kwargs: response)
 
@@ -42,7 +42,7 @@ def test_tmdb_http_error_does_not_leak_v3_key(monkeypatch):
 
 def test_upcoming_api_never_returns_tmdb_key(client, monkeypatch):
     secret = "secret-key"
-    monkeypatch.setenv("ANIWORLD_TMDB_API_KEY", secret)
+    monkeypatch.setenv("H0MELAB_TMDB_API_KEY", secret)
     payload = client.get("/api/upcoming").get_json()
     assert payload["configured"] is True
     assert secret not in str(payload)
@@ -85,7 +85,7 @@ def test_multiple_verified_sites_choose_priority_instead_of_stalling(monkeypatch
     provider = SimpleNamespace(
         series_cls=lambda url: SimpleNamespace(release_year="2000")
     )
-    monkeypatch.setattr("aniworld.providers.resolve_provider", lambda _url: provider)
+    monkeypatch.setattr("h0melab.providers.resolve_provider", lambda _url: provider)
 
     assert upcoming._exact_hit(movie)["url"] == "https://megakino.example/movie"
 
@@ -109,7 +109,7 @@ def test_non_latin_titles_do_not_match_only_because_normalisation_is_empty(monke
     provider = SimpleNamespace(
         series_cls=lambda url: SimpleNamespace(release_year="2000")
     )
-    monkeypatch.setattr("aniworld.providers.resolve_provider", lambda _url: provider)
+    monkeypatch.setattr("h0melab.providers.resolve_provider", lambda _url: provider)
 
     assert upcoming._exact_hit(movie) is None
 
@@ -154,5 +154,5 @@ def test_series_matching_uses_series_sites(monkeypatch):
     provider = SimpleNamespace(
         series_cls=lambda url: SimpleNamespace(release_year="2020-2024")
     )
-    monkeypatch.setattr("aniworld.providers.resolve_provider", lambda _url: provider)
+    monkeypatch.setattr("h0melab.providers.resolve_provider", lambda _url: provider)
     assert upcoming._exact_hit(series)["url"].startswith("https://serienstream.to/")

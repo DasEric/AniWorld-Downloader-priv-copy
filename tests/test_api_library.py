@@ -2,8 +2,8 @@
 
 import pytest
 
-from aniworld.web import db
-from aniworld.web.views import api_media
+from h0melab.web import db
+from h0melab.web.views import api_media
 
 
 @pytest.fixture(autouse=True)
@@ -96,7 +96,7 @@ def test_deleting_something_missing_is_a_400(client):
 
 
 def test_every_library_endpoint_closes_when_the_library_is_off(client, monkeypatch):
-    monkeypatch.setenv("ANIWORLD_ENABLE_LIBRARY", "0")
+    monkeypatch.setenv("H0MELAB_ENABLE_LIBRARY", "0")
     assert client.get("/api/library/locations").status_code == 404
     assert client.get("/api/library/titles").status_code == 404
     assert client.get("/api/library/title?folder=x").status_code == 404
@@ -108,7 +108,7 @@ def test_every_library_endpoint_closes_when_the_library_is_off(client, monkeypat
 # ---------------------------------------------------------------------------
 @pytest.fixture
 def genres(monkeypatch):
-    from aniworld import search
+    from h0melab import search
 
     listing = [
         {"name": "Action", "slug": "action"},
@@ -299,7 +299,7 @@ def test_the_library_page_renders(client):
 
 def test_the_autosync_page_is_hidden_until_enabled(client, monkeypatch):
     assert client.get("/autosync").status_code == 404
-    monkeypatch.setenv("ANIWORLD_ENABLE_AUTOSYNC", "1")
+    monkeypatch.setenv("H0MELAB_ENABLE_AUTOSYNC", "1")
     assert client.get("/autosync").status_code == 200
 
 
@@ -308,7 +308,7 @@ def test_hanime_is_hidden_from_the_home_page_by_default(client):
 
 
 def test_hanime_appears_once_enabled(client, monkeypatch):
-    monkeypatch.setenv("ANIWORLD_ENABLE_HTV", "1")
+    monkeypatch.setenv("H0MELAB_ENABLE_HTV", "1")
     assert b'data-site="htv"' in client.get("/").data
 
 

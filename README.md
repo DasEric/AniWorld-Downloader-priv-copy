@@ -84,7 +84,7 @@ Back up the persistent volume before any production upgrade. Do not delete the o
 
 ## Configuration
 
-Settings can be changed in the browser. A fully documented template is available at [`src/aniworld/.env.example`](src/aniworld/.env.example).
+Settings can be changed in the browser. A fully documented template is available at [`src/h0melab/.env.example`](src/h0melab/.env.example).
 
 Frequently used variables:
 

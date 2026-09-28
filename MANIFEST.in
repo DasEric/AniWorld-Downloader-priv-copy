@@ -1,8 +1,8 @@
-include src/aniworld/.env.example
-include src/aniworld/aniskip/scripts/aniskip.lua
-include src/aniworld/aniskip/scripts/autoexit.lua
-include src/aniworld/aniskip/scripts/autostart.lua
-recursive-include src/aniworld/web/templates *.html
-recursive-include src/aniworld/web/static *.css *.js *.svg *.ico *.png *.webp
-include src/aniworld/web/static/flags/LICENSE.txt
-include src/aniworld/browsers.jsonl
+include src/h0melab/.env.example
+include src/h0melab/aniskip/scripts/aniskip.lua
+include src/h0melab/aniskip/scripts/autoexit.lua
+include src/h0melab/aniskip/scripts/autostart.lua
+recursive-include src/h0melab/web/templates *.html
+recursive-include src/h0melab/web/static *.css *.js *.svg *.ico *.png *.webp
+include src/h0melab/web/static/flags/LICENSE.txt
+include src/h0melab/browsers.jsonl

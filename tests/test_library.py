@@ -4,7 +4,7 @@ import os
 
 import pytest
 
-from aniworld.web import db, library
+from h0melab.web import db, library
 
 
 # ---------------------------------------------------------------------------
@@ -19,7 +19,7 @@ def test_the_default_root_is_a_location(downloads):
 
 
 def test_a_missing_root_is_reported_rather_than_hidden(monkeypatch, tmp_path):
-    monkeypatch.setenv("ANIWORLD_DOWNLOAD_PATH", str(tmp_path / "nope"))
+    monkeypatch.setenv("H0MELAB_DOWNLOAD_PATH", str(tmp_path / "nope"))
     assert library.list_locations()["locations"][0]["exists"] is False
 
 
@@ -33,7 +33,7 @@ def test_custom_paths_show_up_as_locations(tmp_path):
 def test_with_separation_only_existing_language_folders_are_listed(
     monkeypatch, downloads
 ):
-    monkeypatch.setenv("ANIWORLD_LANG_SEPARATION", "1")
+    monkeypatch.setenv("H0MELAB_LANG_SEPARATION", "1")
     (downloads / "german-dub").mkdir()
     locations = library.list_locations()["locations"]
     assert [loc["lang_folder"] for loc in locations] == ["german-dub"]
@@ -42,7 +42,7 @@ def test_with_separation_only_existing_language_folders_are_listed(
 def test_with_separation_and_nothing_on_disk_there_is_nothing_to_browse(
     monkeypatch, downloads
 ):
-    monkeypatch.setenv("ANIWORLD_LANG_SEPARATION", "1")
+    monkeypatch.setenv("H0MELAB_LANG_SEPARATION", "1")
     assert library.list_locations()["locations"] == []
 
 
@@ -60,7 +60,7 @@ def test_an_empty_root_lists_nothing(downloads):
 
 
 def test_a_missing_root_lists_nothing(monkeypatch, tmp_path):
-    monkeypatch.setenv("ANIWORLD_DOWNLOAD_PATH", str(tmp_path / "nope"))
+    monkeypatch.setenv("H0MELAB_DOWNLOAD_PATH", str(tmp_path / "nope"))
     assert library.list_titles() == []
 
 

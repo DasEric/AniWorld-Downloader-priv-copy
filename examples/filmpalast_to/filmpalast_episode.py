@@ -1,4 +1,4 @@
-from aniworld.models import FilmPalastEpisode
+from h0melab.models import FilmPalastEpisode
 
 url = "https://filmpalast.to/stream/scream-7"
 

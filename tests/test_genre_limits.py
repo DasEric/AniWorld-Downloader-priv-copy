@@ -2,8 +2,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from aniworld import search
-from aniworld.extractors.provider import hanime_tv
+from h0melab import search
+from h0melab.extractors.provider import hanime_tv
 
 QUERIES = [
     (search.fetch_genre_animes, {"slug": "action"}),
@@ -41,7 +41,7 @@ def test_limits_apply_to_each_backend(monkeypatch, query, kwargs):
         for n in range(5)
     )
     response = SimpleNamespace(text=rows, raise_for_status=lambda: None)
-    from aniworld.models.s_to import http
+    from h0melab.models.s_to import http
 
     monkeypatch.setattr(search.GLOBAL_SESSION, "get", lambda *a, **k: response)
     monkeypatch.setattr(http, "sto_get", lambda *a, **k: response)
@@ -76,7 +76,7 @@ def test_limits_apply_to_each_backend(monkeypatch, query, kwargs):
     [(search.query_s_to, {"genre": "action"}), (search.query_filmo, {"genre_id": 1})],
 )
 def test_pagination_stops_when_limit_reached(monkeypatch, query, kwargs):
-    from aniworld.models.s_to import http
+    from h0melab.models.s_to import http
 
     calls = []
     page = '<div data-group="shows"><a href="/serie/one"></a><h6 class="show-title">One</h6><a rel="next" href="?page=2">Next</a></div><a href="/movies/one"><h3 class="movie-poster-grid-card__title">One</h3></a>'

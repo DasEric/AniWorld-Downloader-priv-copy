@@ -10,7 +10,7 @@ ignore = ["BLE001", "S110"]
 # a cron line at 22:00 across a DST switch. Its tests build them by hand, so the
 # "always pass a timezone" rule does not apply to them.
 "tests/test_schedule.py" = ["DTZ001"]
-# Both set an environment variable that has to be in place before aniworld is
+# Both set an environment variable that has to be in place before h0melab is
 # imported, so their imports cannot all sit at the top of the file.
 "tests/autosync_simulation.py" = ["E402"]
 "tests/conftest.py" = ["E402"]

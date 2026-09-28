@@ -14,8 +14,9 @@ import os
 import subprocess
 import sys
 import textwrap
+from pathlib import Path
 
-from aniworld.web import app as web_app
+from h0melab.web import app as web_app
 
 EXECUTABLE_JS = ("text/javascript", "application/javascript")
 
@@ -72,12 +73,20 @@ def test_importing_the_web_app_repairs_a_broken_machine_table(tmp_path):
         mimetypes.add_type("text/plain", ".css")
         assert mimetypes.guess_type("x.js")[0] == "text/plain", "poison failed"
 
-        import aniworld.web.app  # noqa: F401
+        import h0melab.web.app  # noqa: F401
 
         print(mimetypes.guess_type("x.js")[0], mimetypes.guess_type("x.css")[0])
         """
     )
-    env = dict(os.environ, ANIWORLD_INSTALL_FOLDER=str(tmp_path / "config"))
+    src_root = Path(__file__).resolve().parents[1] / "src"
+    pythonpath = os.pathsep.join(
+        filter(None, (str(src_root), os.environ.get("PYTHONPATH", "")))
+    )
+    env = dict(
+        os.environ,
+        H0MELAB_INSTALL_FOLDER=str(tmp_path / "config"),
+        PYTHONPATH=pythonpath,
+    )
     finished = subprocess.run(
         [sys.executable, "-c", script],
         capture_output=True,

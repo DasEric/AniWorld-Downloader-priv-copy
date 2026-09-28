@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from aniworld import search
+from h0melab import search
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -21,7 +21,7 @@ def fixture(name):
 @pytest.fixture
 def genre_list_page(monkeypatch):
     monkeypatch.setattr(
-        search, "_fetch_homepage", lambda: fixture("aniworld_genre_list.html")
+        search, "_fetch_homepage", lambda: fixture("h0melab_genre_list.html")
     )
 
 
@@ -31,7 +31,7 @@ def genre_page(monkeypatch):
     calls = []
 
     class Response:
-        text = fixture("aniworld_genre_page.html")
+        text = fixture("h0melab_genre_page.html")
 
         def raise_for_status(self):
             return None
@@ -182,7 +182,7 @@ SERIES_PAGE_TITLES = {
 @pytest.fixture
 def new_episodes_page(monkeypatch):
     class Response:
-        text = fixture("aniworld_new_episodes.html")
+        text = fixture("h0melab_new_episodes.html")
 
         def raise_for_status(self):
             return None
@@ -214,8 +214,8 @@ def test_titles_are_unescaped_in_the_feed(new_episodes_page):
 def test_a_feed_title_finds_the_folder_on_disk(new_episodes_page):
     """The end of the bug. The folder was named after the series page, which
     unescapes, so a feed title that does not never matches it."""
-    from aniworld.models.common.common import clean_title
-    from aniworld.web.media import folder_matches_title
+    from h0melab.models.common.common import clean_title
+    from h0melab.web.media import folder_matches_title
 
     episodes = _by_url(search.fetch_new_episodes())
     for url, series_page_title in SERIES_PAGE_TITLES.items():

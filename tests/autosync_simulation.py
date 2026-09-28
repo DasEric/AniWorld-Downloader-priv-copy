@@ -27,9 +27,9 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
-os.environ["ANIWORLD_INSTALL_FOLDER"] = tempfile.mkdtemp()
+os.environ["H0MELAB_INSTALL_FOLDER"] = tempfile.mkdtemp()
 
-from aniworld.web import autosync
+from h0melab.web import autosync
 
 
 class Sim:
@@ -63,7 +63,7 @@ class Sim:
                 raise AssertionError("the loop is spinning")
             if on_tick:
                 on_tick(self)
-            from aniworld.web.settings_store import autosync_enabled
+            from h0melab.web.settings_store import autosync_enabled
 
             if autosync_enabled():
                 if autosync._due():
@@ -93,15 +93,15 @@ def case(label, ok, detail=""):
 
 def fresh(**env):
     for key in list(os.environ):
-        if key.startswith("ANIWORLD_AUTOSYNC") or key == "ANIWORLD_ENABLE_AUTOSYNC":
+        if key.startswith("H0MELAB_AUTOSYNC") or key == "H0MELAB_ENABLE_AUTOSYNC":
             del os.environ[key]
-    os.environ["ANIWORLD_ENABLE_AUTOSYNC"] = "1"
+    os.environ["H0MELAB_ENABLE_AUTOSYNC"] = "1"
     os.environ.update(env)
 
 
 # ---------------------------------------------------------------------------
 print("\n=== fixed time, one month ===")
-fresh(ANIWORLD_AUTOSYNC_MODE="cron", ANIWORLD_AUTOSYNC_CRON="0 22 * * *")
+fresh(H0MELAB_AUTOSYNC_MODE="cron", H0MELAB_AUTOSYNC_CRON="0 22 * * *")
 sim = Sim("2026-06-01 09:00")
 runs = sim.run(days=30)
 stamps = {sim.local(r).strftime("%H:%M") for r in runs}
@@ -109,7 +109,7 @@ case("one run a day", len(runs) == 30, f"{len(runs)} runs")
 case("always at 22:00 local", stamps == {"22:00"}, stamps)
 
 print("\n=== fixed time across the spring DST switch (Berlin, 29 Mar 02:00->03:00) ===")
-fresh(ANIWORLD_AUTOSYNC_MODE="cron", ANIWORLD_AUTOSYNC_CRON="0 22 * * *")
+fresh(H0MELAB_AUTOSYNC_MODE="cron", H0MELAB_AUTOSYNC_CRON="0 22 * * *")
 sim = Sim("2026-03-26 09:00")
 runs = sim.run(days=7)
 stamps = sorted({sim.local(r).strftime("%H:%M") for r in runs})
@@ -117,13 +117,13 @@ case("still one run a day", len(runs) == 7, f"{len(runs)} runs")
 case("still 22:00 on the wall", stamps == ["22:00"], stamps)
 
 print("\n=== a 02:30 run on the night that has no 02:30 ===")
-fresh(ANIWORLD_AUTOSYNC_MODE="cron", ANIWORLD_AUTOSYNC_CRON="30 2 * * *")
+fresh(H0MELAB_AUTOSYNC_MODE="cron", H0MELAB_AUTOSYNC_CRON="30 2 * * *")
 sim = Sim("2026-03-27 09:00")
 runs = sim.run(days=5)
 case("no day lost, none doubled", len(runs) == 5, [str(sim.local(r)) for r in runs])
 
 print("\n=== the autumn switch, when 02:30 happens twice ===")
-fresh(ANIWORLD_AUTOSYNC_MODE="cron", ANIWORLD_AUTOSYNC_CRON="30 2 * * *")
+fresh(H0MELAB_AUTOSYNC_MODE="cron", H0MELAB_AUTOSYNC_CRON="30 2 * * *")
 sim = Sim("2026-10-23 09:00")
 runs = sim.run(days=5)
 case(
@@ -133,7 +133,7 @@ case(
 )
 
 print("\n=== weekdays only ===")
-fresh(ANIWORLD_AUTOSYNC_MODE="cron", ANIWORLD_AUTOSYNC_CRON="0 7 * * 1,2,3,4,5")
+fresh(H0MELAB_AUTOSYNC_MODE="cron", H0MELAB_AUTOSYNC_CRON="0 7 * * 1,2,3,4,5")
 sim = Sim("2026-06-01 00:30")
 runs = sim.run(days=28)
 weekdays = {sim.local(r).weekday() for r in runs}
@@ -141,7 +141,7 @@ case("20 runs in four weeks", len(runs) == 20, f"{len(runs)} runs")
 case("never at the weekend", weekdays <= {0, 1, 2, 3, 4}, weekdays)
 
 print("\n=== two times a day that cron needs two lines for ===")
-fresh(ANIWORLD_AUTOSYNC_MODE="cron", ANIWORLD_AUTOSYNC_CRON="0 8 * * *; 30 22 * * *")
+fresh(H0MELAB_AUTOSYNC_MODE="cron", H0MELAB_AUTOSYNC_CRON="0 8 * * *; 30 22 * * *")
 sim = Sim("2026-06-01 00:05")
 runs = sim.run(days=10)
 stamps = sorted({sim.local(r).strftime("%H:%M") for r in runs})
@@ -149,7 +149,7 @@ case("20 runs", len(runs) == 20, f"{len(runs)} runs")
 case("08:00 and 22:30", stamps == ["08:00", "22:30"], stamps)
 
 print("\n=== interval mode ===")
-fresh(ANIWORLD_AUTOSYNC_INTERVAL="6h")
+fresh(H0MELAB_AUTOSYNC_INTERVAL="6h")
 sim = Sim("2026-06-01 00:00")
 runs = sim.run(days=7)
 gaps = {round((b - a).total_seconds()) for a, b in itertools.pairwise(runs)}
@@ -158,20 +158,20 @@ case("every six hours", gaps == {6 * 3600}, gaps)
 case("one at once plus one every six hours", len(runs) == 28, f"{len(runs)} runs")
 
 print("\n=== a 90 minute interval ===")
-fresh(ANIWORLD_AUTOSYNC_INTERVAL="90m")
+fresh(H0MELAB_AUTOSYNC_INTERVAL="90m")
 sim = Sim("2026-06-01 00:00")
 runs = sim.run(days=2)
 gaps = {round((b - a).total_seconds()) for a, b in itertools.pairwise(runs)}
 case("every 90 minutes", gaps == {5400}, gaps)
 
 print("\n=== every 30 minutes, as cron ===")
-fresh(ANIWORLD_AUTOSYNC_MODE="cron", ANIWORLD_AUTOSYNC_CRON="*/30 * * * *")
+fresh(H0MELAB_AUTOSYNC_MODE="cron", H0MELAB_AUTOSYNC_CRON="*/30 * * * *")
 sim = Sim("2026-06-01 00:01")
 runs = sim.run(days=2)
 case("48 a day", len(runs) == 96, f"{len(runs)} runs")
 
 print("\n=== turned on at 23:00 with a 22:00 schedule ===")
-fresh(ANIWORLD_AUTOSYNC_MODE="cron", ANIWORLD_AUTOSYNC_CRON="0 22 * * *")
+fresh(H0MELAB_AUTOSYNC_MODE="cron", H0MELAB_AUTOSYNC_CRON="0 22 * * *")
 sim = Sim("2026-06-01 23:00")
 runs = sim.run(days=1)
 case(
@@ -186,7 +186,7 @@ case(
 )
 
 print("\n=== the machine was off for a week ===")
-fresh(ANIWORLD_AUTOSYNC_MODE="cron", ANIWORLD_AUTOSYNC_CRON="0 22 * * *")
+fresh(H0MELAB_AUTOSYNC_MODE="cron", H0MELAB_AUTOSYNC_CRON="0 22 * * *")
 sim = Sim("2026-06-08 10:00")
 sim.state["last_run"] = (sim.now - timedelta(days=7)).isoformat()
 runs = sim.run(days=1)
@@ -197,13 +197,13 @@ case(
 )
 
 print("\n=== the schedule is changed while it runs ===")
-fresh(ANIWORLD_AUTOSYNC_MODE="cron", ANIWORLD_AUTOSYNC_CRON="0 22 * * *")
+fresh(H0MELAB_AUTOSYNC_MODE="cron", H0MELAB_AUTOSYNC_CRON="0 22 * * *")
 sim = Sim("2026-06-01 09:00")
 
 
 def switch(s):
     if s.local().day == 3 and s.local().hour == 10:
-        os.environ["ANIWORLD_AUTOSYNC_CRON"] = "0 6 * * *"
+        os.environ["H0MELAB_AUTOSYNC_CRON"] = "0 6 * * *"
 
 
 runs = sim.run(days=6, on_tick=switch)
@@ -215,27 +215,27 @@ case(
 )
 
 print("\n=== switched off halfway ===")
-fresh(ANIWORLD_AUTOSYNC_MODE="cron", ANIWORLD_AUTOSYNC_CRON="0 22 * * *")
+fresh(H0MELAB_AUTOSYNC_MODE="cron", H0MELAB_AUTOSYNC_CRON="0 22 * * *")
 sim = Sim("2026-06-01 09:00")
 
 
 def disable(s):
     if s.local().day == 3:
-        os.environ["ANIWORLD_ENABLE_AUTOSYNC"] = "0"
+        os.environ["H0MELAB_ENABLE_AUTOSYNC"] = "0"
 
 
 runs = sim.run(days=6, on_tick=disable)
 case("stops when it is turned off", len(runs) == 2, [str(sim.local(r)) for r in runs])
 
 print("\n=== enabled long after the process started ===")
-fresh(ANIWORLD_AUTOSYNC_MODE="cron", ANIWORLD_AUTOSYNC_CRON="0 3 * * *")
-os.environ["ANIWORLD_ENABLE_AUTOSYNC"] = "0"
+fresh(H0MELAB_AUTOSYNC_MODE="cron", H0MELAB_AUTOSYNC_CRON="0 3 * * *")
+os.environ["H0MELAB_ENABLE_AUTOSYNC"] = "0"
 sim = Sim("2026-06-01 09:00")
 
 
 def enable_later(s):
     if s.local().day == 5 and s.local().hour == 14:
-        os.environ["ANIWORLD_ENABLE_AUTOSYNC"] = "1"
+        os.environ["H0MELAB_ENABLE_AUTOSYNC"] = "1"
 
 
 runs = sim.run(days=7, on_tick=enable_later)
@@ -247,15 +247,15 @@ case(
 )
 
 print("\n=== enabled late, with the thread started at boot ===")
-fresh(ANIWORLD_AUTOSYNC_MODE="cron", ANIWORLD_AUTOSYNC_CRON="0 3 * * *")
-os.environ["ANIWORLD_ENABLE_AUTOSYNC"] = "0"
+fresh(H0MELAB_AUTOSYNC_MODE="cron", H0MELAB_AUTOSYNC_CRON="0 3 * * *")
+os.environ["H0MELAB_ENABLE_AUTOSYNC"] = "0"
 sim = Sim("2026-06-01 09:00")
 autosync._anchor()  # what ensure_started() does at boot, while it is still off
 
 
 def enable_on_the_fifth(s):
     if s.local().day == 5 and s.local().hour == 14:
-        os.environ["ANIWORLD_ENABLE_AUTOSYNC"] = "1"
+        os.environ["H0MELAB_ENABLE_AUTOSYNC"] = "1"
 
 
 runs = sim.run(days=7, on_tick=enable_on_the_fifth)
@@ -270,7 +270,7 @@ case(
 )
 
 print("\n=== a schedule that never comes round ===")
-fresh(ANIWORLD_AUTOSYNC_MODE="cron", ANIWORLD_AUTOSYNC_CRON="0 0 30 2 *")
+fresh(H0MELAB_AUTOSYNC_MODE="cron", H0MELAB_AUTOSYNC_CRON="0 0 30 2 *")
 sim = Sim("2026-06-01 09:00")
 runs = sim.run(days=3)
 case(
@@ -280,14 +280,14 @@ case(
 )
 
 print("\n=== how often the thread wakes ===")
-fresh(ANIWORLD_AUTOSYNC_MODE="cron", ANIWORLD_AUTOSYNC_CRON="0 22 * * *")
+fresh(H0MELAB_AUTOSYNC_MODE="cron", H0MELAB_AUTOSYNC_CRON="0 22 * * *")
 sim = Sim("2026-06-01 09:00")
 sim.run(days=2)
 case("naps stay within the tick", max(sim.naps) <= autosync.TICK_SECONDS, max(sim.naps))
 case("a day is under 300 wakeups", len(sim.naps) / 2 < 300, len(sim.naps) / 2)
 
 print("\n=== a last run written without a timezone ===")
-fresh(ANIWORLD_AUTOSYNC_INTERVAL="6h")
+fresh(H0MELAB_AUTOSYNC_INTERVAL="6h")
 sim = Sim("2026-06-01 09:00")
 sim.state["last_run"] = "2026-06-01T00:00:00"
 try:

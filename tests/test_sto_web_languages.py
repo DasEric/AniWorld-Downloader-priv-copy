@@ -1,6 +1,6 @@
 from types import SimpleNamespace
 
-from aniworld.web.views import api_media
+from h0melab.web.views import api_media
 
 
 class FakeEpisode:

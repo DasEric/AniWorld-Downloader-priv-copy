@@ -5,10 +5,10 @@ from pathlib import Path
 
 import pytest
 
-from aniworld.web import db, theming
+from h0melab.web import db, theming
 
 REPO = Path(__file__).resolve().parent.parent
-STYLE = REPO / "src" / "aniworld" / "web" / "static" / "style.css"
+STYLE = REPO / "src" / "h0melab" / "web" / "static" / "style.css"
 THEMES = REPO / "themes"
 
 # Every theme file shipped in the repo, checked as a set so adding one cannot
@@ -437,7 +437,7 @@ def test_put_refuses_an_oversized_theme(client):
 
 def test_custom_css_is_admin_only(auth_app, auth_client):
     """A plain user may load the theme but never change it."""
-    from aniworld.web.views import ADMIN_ENDPOINTS
+    from h0melab.web.views import ADMIN_ENDPOINTS
 
     assert "api.get_custom_css" in ADMIN_ENDPOINTS
     assert "api.update_custom_css" in ADMIN_ENDPOINTS
@@ -663,7 +663,7 @@ def test_the_api_refuses_an_oversized_shader(client):
 
 
 def test_the_shader_is_admin_only():
-    from aniworld.web.views import ADMIN_ENDPOINTS
+    from h0melab.web.views import ADMIN_ENDPOINTS
 
     assert "api.get_custom_shader" in ADMIN_ENDPOINTS
     assert "api.update_custom_shader" in ADMIN_ENDPOINTS

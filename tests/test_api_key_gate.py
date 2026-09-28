@@ -2,7 +2,7 @@
 
 import pytest
 
-from aniworld.web import apikeys, db
+from h0melab.web import apikeys, db
 
 
 def headers(raw):
@@ -32,7 +32,7 @@ def test_a_key_works_as_a_bearer_token(client, api_key):
 
 
 def test_an_unknown_key_is_rejected(client):
-    response = client.get("/api/ping", headers=headers("awd_made-up"))
+    response = client.get("/api/ping", headers=headers("h0d_made-up"))
     assert response.status_code == 401
     assert "Invalid" in response.get_json()["error"]
 
@@ -109,7 +109,7 @@ def test_a_read_key_cannot_start_a_download(client, api_key):
 
 def test_search_stays_open_to_read_keys(client, api_key, monkeypatch):
     """Search is a POST only because the query goes in the body."""
-    from aniworld.web import sitesearch
+    from h0melab.web import sitesearch
 
     monkeypatch.setattr(sitesearch, "search", lambda site, keyword: [])
     raw, _ = api_key(scope="read")
@@ -180,7 +180,7 @@ def test_an_admin_key_can_change_settings(client, api_key):
     )
     assert response.status_code == 200
 
-    from aniworld.web import settings_store
+    from h0melab.web import settings_store
 
     assert settings_store.htv_enabled() is True
 

@@ -6,9 +6,9 @@ from unittest.mock import MagicMock, Mock
 import niquests
 import pytest
 
-from aniworld import config
-from aniworld.models.common import hls
-from aniworld.playwright import captcha
+from h0melab import config
+from h0melab.models.common import hls
+from h0melab.playwright import captcha
 
 
 @pytest.fixture
@@ -90,7 +90,7 @@ def test_hls_worker_receives_refreshed_scoped_cookies(session, monkeypatch):
 def handshake(monkeypatch, session):
     from patchright import sync_api
 
-    from aniworld import autodeps
+    from h0melab import autodeps
 
     browser = Mock()
     browser.context.cookies.return_value = []
@@ -159,7 +159,7 @@ def test_existing_clearance_does_not_finish_active_challenge(handshake, monkeypa
 def test_hanime_download_passes_browser_headers_to_ffmpeg(
     session, monkeypatch, tmp_path
 ):
-    from aniworld.models.common import common
+    from h0melab.models.common import common
 
     session.headers["User-Agent"] = "Browser test UA"
     parallel = Mock(side_effect=hls.HLSUnsupported("fallback"))

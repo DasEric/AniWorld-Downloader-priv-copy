@@ -4,7 +4,7 @@ import sqlite3
 
 import pytest
 
-from aniworld.web import db
+from h0melab.web import db
 
 
 def test_new_database_has_no_admin():
@@ -58,8 +58,8 @@ def test_usernames_are_unique():
 
 
 def test_bootstrap_admin_from_the_environment(monkeypatch):
-    monkeypatch.setenv("ANIWORLD_WEB_ADMIN_USER", "docker-admin")
-    monkeypatch.setenv("ANIWORLD_WEB_ADMIN_PASS", "hunter2hunter2")
+    monkeypatch.setenv("H0MELAB_WEB_ADMIN_USER", "docker-admin")
+    monkeypatch.setenv("H0MELAB_WEB_ADMIN_PASS", "hunter2hunter2")
     monkeypatch.setattr(db, "_initialized", False)
     db.init_db()
 
@@ -69,8 +69,8 @@ def test_bootstrap_admin_from_the_environment(monkeypatch):
 
 def test_bootstrap_is_skipped_when_an_admin_exists(monkeypatch):
     db.create_user("root", "hunter2hunter2", role="admin")
-    monkeypatch.setenv("ANIWORLD_WEB_ADMIN_USER", "docker-admin")
-    monkeypatch.setenv("ANIWORLD_WEB_ADMIN_PASS", "hunter2hunter2")
+    monkeypatch.setenv("H0MELAB_WEB_ADMIN_USER", "docker-admin")
+    monkeypatch.setenv("H0MELAB_WEB_ADMIN_PASS", "hunter2hunter2")
     monkeypatch.setattr(db, "_initialized", False)
     db.init_db()
 
@@ -79,7 +79,7 @@ def test_bootstrap_is_skipped_when_an_admin_exists(monkeypatch):
 
 
 def test_bootstrap_needs_both_halves(monkeypatch):
-    monkeypatch.setenv("ANIWORLD_WEB_ADMIN_USER", "docker-admin")
+    monkeypatch.setenv("H0MELAB_WEB_ADMIN_USER", "docker-admin")
     monkeypatch.setattr(db, "_initialized", False)
     db.init_db()
     assert db.list_users() == []

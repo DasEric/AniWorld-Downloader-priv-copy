@@ -2,7 +2,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from aniworld.extractors.provider import hanime_tv
+from h0melab.extractors.provider import hanime_tv
 
 
 def test_genres_are_fetched_and_decoded(monkeypatch):

@@ -1,4 +1,4 @@
-from aniworld.search import query_kinox
+from h0melab.search import query_kinox
 
 # limit caps the result count; None keeps the site's existing scope, 0 skips fetching.
 # Available genre slugs (09/2026 as of right now):

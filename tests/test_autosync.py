@@ -6,8 +6,8 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from aniworld.models.aniworld_to import AniworldSeason, AniworldSeries
-from aniworld.web import autosync, db
+from h0melab.models.h0melab_to import AniworldSeason, AniworldSeries
+from h0melab.web import autosync, db
 
 AW = "https://aniworld.to/anime/stream/naruto"
 STO = "https://serienstream.to/serie/dark"
@@ -71,7 +71,7 @@ def test_find_tracked_series_uses_language_and_destination(tmp_path):
 
 
 def test_same_series_can_track_two_languages_and_paths(tmp_path, monkeypatch):
-    monkeypatch.setenv("ANIWORLD_LANG_SEPARATION", "1")
+    monkeypatch.setenv("H0MELAB_LANG_SEPARATION", "1")
     path_id = db.add_custom_path("Other", str(tmp_path / "other"))
     add_row()
     add_row(language="English Dub")
@@ -199,7 +199,7 @@ def test_add_rejects_an_exact_duplicate_before_fetching(monkeypatch):
 
 
 def test_gap_mode_queues_every_missing_episode(monkeypatch, downloads):
-    monkeypatch.setenv("ANIWORLD_LANG_SEPARATION", "1")
+    monkeypatch.setenv("H0MELAB_LANG_SEPARATION", "1")
     folder = downloads / "german-dub" / "Naruto"
     folder.mkdir(parents=True)
     (folder / "Naruto S01E001.mkv").write_bytes(b"x")
@@ -217,8 +217,8 @@ def test_gap_mode_queues_every_missing_episode(monkeypatch, downloads):
 
 
 def test_new_only_ignores_baseline_but_queues_later_episodes(monkeypatch, downloads):
-    monkeypatch.setenv("ANIWORLD_AUTOSYNC_NEW_ONLY", "1")
-    monkeypatch.setenv("ANIWORLD_LANG_SEPARATION", "1")
+    monkeypatch.setenv("H0MELAB_AUTOSYNC_NEW_ONLY", "1")
+    monkeypatch.setenv("H0MELAB_LANG_SEPARATION", "1")
     (downloads / "german-dub" / "Naruto").mkdir(parents=True)
     row = add_row(baseline=["1:1", "1:2"])
     monkeypatch.setattr(
@@ -233,8 +233,8 @@ def test_new_only_ignores_baseline_but_queues_later_episodes(monkeypatch, downlo
 
 
 def test_new_only_retries_a_new_episode_until_it_exists(monkeypatch, downloads):
-    monkeypatch.setenv("ANIWORLD_AUTOSYNC_NEW_ONLY", "1")
-    monkeypatch.setenv("ANIWORLD_LANG_SEPARATION", "1")
+    monkeypatch.setenv("H0MELAB_AUTOSYNC_NEW_ONLY", "1")
+    monkeypatch.setenv("H0MELAB_LANG_SEPARATION", "1")
     (downloads / "german-dub" / "Naruto").mkdir(parents=True)
     row = add_row(baseline=["1:1"])
     monkeypatch.setattr(
@@ -249,8 +249,8 @@ def test_new_only_retries_a_new_episode_until_it_exists(monkeypatch, downloads):
 
 
 def test_new_only_fails_closed_if_the_saved_baseline_is_corrupt(monkeypatch, downloads):
-    monkeypatch.setenv("ANIWORLD_AUTOSYNC_NEW_ONLY", "1")
-    monkeypatch.setenv("ANIWORLD_LANG_SEPARATION", "1")
+    monkeypatch.setenv("H0MELAB_AUTOSYNC_NEW_ONLY", "1")
+    monkeypatch.setenv("H0MELAB_LANG_SEPARATION", "1")
     (downloads / "german-dub" / "Naruto").mkdir(parents=True)
     row = add_row()
     with db.session() as conn:
@@ -405,7 +405,7 @@ def test_status_exposes_list_configuration():
 
 
 def test_series_api_lists_adds_pauses_and_removes(client, monkeypatch):
-    monkeypatch.setenv("ANIWORLD_ENABLE_AUTOSYNC", "1")
+    monkeypatch.setenv("H0MELAB_ENABLE_AUTOSYNC", "1")
     monkeypatch.setattr(
         autosync,
         "add_subscription",
@@ -428,7 +428,7 @@ def test_series_api_lists_adds_pauses_and_removes(client, monkeypatch):
 
 
 def test_series_state_api_matches_the_modal_selection(client, monkeypatch, tmp_path):
-    monkeypatch.setenv("ANIWORLD_ENABLE_AUTOSYNC", "1")
+    monkeypatch.setenv("H0MELAB_ENABLE_AUTOSYNC", "1")
     path_id = db.add_custom_path("Series", str(tmp_path / "series"))
     row = add_row(
         url=STO,
@@ -462,7 +462,7 @@ def test_series_state_api_matches_the_modal_selection(client, monkeypatch, tmp_p
 
 @pytest.mark.parametrize("path_id", ["nope", "0", "-1"])
 def test_series_state_api_rejects_invalid_path_id(client, monkeypatch, path_id):
-    monkeypatch.setenv("ANIWORLD_ENABLE_AUTOSYNC", "1")
+    monkeypatch.setenv("H0MELAB_ENABLE_AUTOSYNC", "1")
     response = client.get(
         "/api/autosync/series/state",
         query_string={
@@ -489,13 +489,13 @@ def test_series_state_api_rejects_invalid_path_id(client, monkeypatch, path_id):
     ],
 )
 def test_series_api_rejects_wrong_json_types(client, monkeypatch, payload):
-    monkeypatch.setenv("ANIWORLD_ENABLE_AUTOSYNC", "1")
+    monkeypatch.setenv("H0MELAB_ENABLE_AUTOSYNC", "1")
     response = client.post("/api/autosync/series", json=payload)
     assert response.status_code == 400
 
 
 def test_series_api_rejects_a_string_boolean(client, monkeypatch):
-    monkeypatch.setenv("ANIWORLD_ENABLE_AUTOSYNC", "1")
+    monkeypatch.setenv("H0MELAB_ENABLE_AUTOSYNC", "1")
     row = add_row()
     response = client.patch(
         f"/api/autosync/series/{row['id']}", json={"enabled": "false"}
@@ -505,14 +505,14 @@ def test_series_api_rejects_a_string_boolean(client, monkeypatch):
 
 
 def test_series_api_rejects_a_non_string_provider_update(client, monkeypatch):
-    monkeypatch.setenv("ANIWORLD_ENABLE_AUTOSYNC", "1")
+    monkeypatch.setenv("H0MELAB_ENABLE_AUTOSYNC", "1")
     row = add_row()
     response = client.patch(f"/api/autosync/series/{row['id']}", json={"provider": 123})
     assert response.status_code == 400
 
 
 def test_series_api_cannot_resume_a_conflicting_language(client, monkeypatch):
-    monkeypatch.setenv("ANIWORLD_ENABLE_AUTOSYNC", "1")
+    monkeypatch.setenv("H0MELAB_ENABLE_AUTOSYNC", "1")
     german = add_row()
     english = add_row(language="English Dub", enabled=False)
     assert german["enabled"] == 1
@@ -524,7 +524,7 @@ def test_series_api_cannot_resume_a_conflicting_language(client, monkeypatch):
 
 
 def test_autosync_page_explains_the_explicit_list(client, monkeypatch):
-    monkeypatch.setenv("ANIWORLD_ENABLE_AUTOSYNC", "1")
+    monkeypatch.setenv("H0MELAB_ENABLE_AUTOSYNC", "1")
     body = client.get("/autosync").get_data(as_text=True)
     assert "checks only the series" in body
     assert "SerienStream" in body
@@ -534,7 +534,7 @@ def test_autosync_page_explains_the_explicit_list(client, monkeypatch):
 
 
 def test_series_modal_uses_an_autosync_checkbox(client, monkeypatch):
-    monkeypatch.setenv("ANIWORLD_ENABLE_AUTOSYNC", "1")
+    monkeypatch.setenv("H0MELAB_ENABLE_AUTOSYNC", "1")
     body = client.get("/").get_data(as_text=True)
     assert 'type="checkbox" id="autosyncToggle"' in body
     assert 'id="autosyncRow" hidden' not in body
@@ -561,8 +561,8 @@ def test_fresh_interval_install_is_due_and_default_is_a_day():
 
 
 def test_fixed_schedule_is_counted_from_enable_time(monkeypatch):
-    monkeypatch.setenv("ANIWORLD_AUTOSYNC_MODE", "cron")
-    monkeypatch.setenv("ANIWORLD_AUTOSYNC_CRON", "* * * * *")
+    monkeypatch.setenv("H0MELAB_AUTOSYNC_MODE", "cron")
+    monkeypatch.setenv("H0MELAB_AUTOSYNC_CRON", "* * * * *")
     assert autosync._due() is False
     assert autosync.next_run_at() > autosync._now()
 

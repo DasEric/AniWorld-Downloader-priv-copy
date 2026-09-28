@@ -9,10 +9,10 @@ uses the franchise.
 
 import pytest
 
-from aniworld.extractors.provider import hanime_tv as extractor
-from aniworld.models.common import common
-from aniworld.models.hanime_tv.episode import HanimeTVEpisode
-from aniworld.models.hanime_tv.series import HanimeTVSeries
+from h0melab.extractors.provider import hanime_tv as extractor
+from h0melab.models.common import common
+from h0melab.models.hanime_tv.episode import HanimeTVEpisode
+from h0melab.models.hanime_tv.series import HanimeTVSeries
 
 VIDEO = "https://hanime.tv/videos/hentai/{slug}"
 
@@ -88,7 +88,7 @@ def hanime(monkeypatch, tmp_path):
 
         for module in ("episode", "series"):
             monkeypatch.setattr(
-                f"aniworld.models.hanime_tv.{module}.fetch_hanime_api_data",
+                f"h0melab.models.hanime_tv.{module}.fetch_hanime_api_data",
                 fake_fetch,
             )
 
@@ -166,7 +166,7 @@ def test_naming_costs_no_extra_request(monkeypatch, tmp_path):
 
     for module in ("episode", "series"):
         monkeypatch.setattr(
-            f"aniworld.models.hanime_tv.{module}.fetch_hanime_api_data",
+            f"h0melab.models.hanime_tv.{module}.fetch_hanime_api_data",
             counting_fetch,
         )
 
@@ -192,7 +192,7 @@ def test_a_video_missing_from_the_franchise_list_falls_back_to_its_own_name(
 
     for module in ("episode", "series"):
         monkeypatch.setattr(
-            f"aniworld.models.hanime_tv.{module}.fetch_hanime_api_data",
+            f"h0melab.models.hanime_tv.{module}.fetch_hanime_api_data",
             partial_fetch,
         )
 
@@ -214,7 +214,7 @@ def test_a_nameless_video_falls_back_to_the_franchise(monkeypatch, tmp_path):
 
     for module in ("episode", "series"):
         monkeypatch.setattr(
-            f"aniworld.models.hanime_tv.{module}.fetch_hanime_api_data",
+            f"h0melab.models.hanime_tv.{module}.fetch_hanime_api_data",
             nameless_fetch,
         )
 

@@ -2,7 +2,7 @@
 
 import pytest
 
-from aniworld.web import db, settings_store
+from h0melab.web import db, settings_store
 
 
 # ---------------------------------------------------------------------------
@@ -23,12 +23,12 @@ def test_tmdb_key_saves_while_discord_bot_is_enabled(client, monkeypatch, tmp_pa
     """A running/configured Discord bot must not intercept TMDB-only saves."""
     from dotenv import dotenv_values
 
-    from aniworld.web.views import api_settings
+    from h0melab.web.views import api_settings
 
     stored = tmp_path / ".web-settings.env"
     monkeypatch.setattr(settings_store, "PANEL_SETTINGS_PATH", stored)
-    monkeypatch.setenv("ANIWORLD_DISCORD_BOT_ENABLED", "1")
-    monkeypatch.setenv("ANIWORLD_DISCORD_TOKEN", "discord-token")
+    monkeypatch.setenv("H0MELAB_DISCORD_BOT_ENABLED", "1")
+    monkeypatch.setenv("H0MELAB_DISCORD_TOKEN", "discord-token")
 
     def unexpected_reconcile():
         raise AssertionError("TMDB-only saves must not restart the Discord bot")
@@ -39,7 +39,7 @@ def test_tmdb_key_saves_while_discord_bot_is_enabled(client, monkeypatch, tmp_pa
     assert response.status_code == 200
     assert response.get_json() == {"ok": True, "tmdb": {"key_set": True}}
     assert settings_store.tmdb_settings() == {"key_set": True}
-    assert dotenv_values(stored)["ANIWORLD_TMDB_API_KEY"] == "tmdb-secret"
+    assert dotenv_values(stored)["H0MELAB_TMDB_API_KEY"] == "tmdb-secret"
 
 
 def test_a_persistence_failure_is_reported_as_a_server_error(client, monkeypatch):
@@ -138,13 +138,13 @@ def test_an_empty_preview_is_a_400(client):
 
 
 def test_previewing_is_admin_only_like_the_rest_of_the_settings():
-    from aniworld.web.views import ADMIN_ENDPOINTS
+    from h0melab.web.views import ADMIN_ENDPOINTS
 
     assert "api.preview_schedule" in ADMIN_ENDPOINTS
 
 
 def test_a_preview_is_described_in_the_ui_language(client, monkeypatch):
-    monkeypatch.setenv("ANIWORLD_UI_LANGUAGE", "de")
+    monkeypatch.setenv("H0MELAB_UI_LANGUAGE", "de")
     body = client.post(
         "/api/settings/schedule-preview", json={"autosync_cron": "0 22 * * 1"}
     ).get_json()
@@ -152,7 +152,7 @@ def test_a_preview_is_described_in_the_ui_language(client, monkeypatch):
 
 
 def test_the_provider_order_can_be_saved(client):
-    from aniworld.web.media import WORKING_PROVIDERS
+    from h0melab.web.media import WORKING_PROVIDERS
 
     order = list(reversed(WORKING_PROVIDERS))
     assert (
@@ -285,7 +285,7 @@ def test_a_blanked_field_does_not_apply_the_others(client, tmp_path):
 def test_a_blanked_path_can_never_resolve_to_home(client, tmp_path):
     from pathlib import Path
 
-    from aniworld.web import paths
+    from h0melab.web import paths
 
     path_id = db.add_custom_path("Movies", str(tmp_path))
     client.put(f"/api/custom-paths/{path_id}", json={"path": ""})
@@ -448,7 +448,7 @@ def test_the_settings_page_no_longer_warns_about_restart_resets(client):
     body = client.get("/settings").get_data(as_text=True)
     assert "settings.persist_notice" not in body
     assert "reset-badge" not in body
-    assert "reset when AniWorld Downloader restarts" not in body
+    assert "reset when H0melab Downloader restarts" not in body
 
 
 def test_the_export_holds_what_is_running(client):
@@ -457,32 +457,32 @@ def test_the_export_holds_what_is_running(client):
         json={"enable_kinox": True, "ui_language": "de", "autosync_interval": "6h"},
     )
     body = client.get("/api/settings/env").get_data(as_text=True)
-    assert "ANIWORLD_ENABLE_KINOX=1" in body
-    assert "ANIWORLD_UI_LANGUAGE=de" in body
-    assert "ANIWORLD_AUTOSYNC_INTERVAL=6h" in body
+    assert "H0MELAB_ENABLE_KINOX=1" in body
+    assert "H0MELAB_UI_LANGUAGE=de" in body
+    assert "H0MELAB_AUTOSYNC_INTERVAL=6h" in body
 
 
 def test_the_export_covers_every_site(client):
-    from aniworld.web.media import SITE_KEYS
+    from h0melab.web.media import SITE_KEYS
 
     body = client.get("/api/settings/env").get_data(as_text=True)
     for site in SITE_KEYS:
-        assert f"ANIWORLD_ENABLE_{site.upper()}=" in body, site
+        assert f"H0MELAB_ENABLE_{site.upper()}=" in body, site
 
 
 def test_the_export_leaves_secrets_out(client, monkeypatch):
     """It lands in a downloads folder, so nothing worth stealing goes in it."""
-    monkeypatch.setenv("ANIWORLD_DISCORD_TOKEN", "super-secret-token")
-    monkeypatch.setenv("ANIWORLD_OIDC_CLIENT_SECRET", "oidc-secret")
-    monkeypatch.setenv("ANIWORLD_WEB_ADMIN_PASS", "hunter2hunter2")
+    monkeypatch.setenv("H0MELAB_DISCORD_TOKEN", "super-secret-token")
+    monkeypatch.setenv("H0MELAB_OIDC_CLIENT_SECRET", "oidc-secret")
+    monkeypatch.setenv("H0MELAB_WEB_ADMIN_PASS", "hunter2hunter2")
 
     body = client.get("/api/settings/env").get_data(as_text=True)
     for secret in ("super-secret-token", "oidc-secret", "hunter2hunter2"):
         assert secret not in body
     for key in (
-        "ANIWORLD_DISCORD_TOKEN",
-        "ANIWORLD_OIDC_CLIENT_SECRET",
-        "ANIWORLD_WEB_ADMIN_PASS",
+        "H0MELAB_DISCORD_TOKEN",
+        "H0MELAB_OIDC_CLIENT_SECRET",
+        "H0MELAB_WEB_ADMIN_PASS",
     ):
         assert key not in body
 
@@ -505,15 +505,15 @@ def test_the_export_reads_back_as_the_same_settings(client, tmp_path):
     written.write_text(client.get("/api/settings/env").get_data(as_text=True))
     loaded = dotenv_values(written)
 
-    assert loaded["ANIWORLD_AUTOSYNC_CRON"] == "0 22 * * 1,5", "quotes survive"
-    assert loaded["ANIWORLD_ENABLE_HTV"] == "1"
-    assert loaded["ANIWORLD_ENABLE_MEGAKINO"] == "0"
-    assert loaded["ANIWORLD_NAMING_TEMPLATE"].endswith(".mp4"), "spaces survive"
-    assert loaded["ANIWORLD_UI_LANGUAGE"] == "en"
+    assert loaded["H0MELAB_AUTOSYNC_CRON"] == "0 22 * * 1,5", "quotes survive"
+    assert loaded["H0MELAB_ENABLE_HTV"] == "1"
+    assert loaded["H0MELAB_ENABLE_MEGAKINO"] == "0"
+    assert loaded["H0MELAB_NAMING_TEMPLATE"].endswith(".mp4"), "spaces survive"
+    assert loaded["H0MELAB_UI_LANGUAGE"] == "en"
 
 
 def test_the_export_needs_an_admin():
-    from aniworld.web.views import ADMIN_ENDPOINTS
+    from h0melab.web.views import ADMIN_ENDPOINTS
 
     assert "api.export_env" in ADMIN_ENDPOINTS
 
@@ -542,6 +542,6 @@ def test_the_path_preview_falls_back_to_the_saved_path(client):
 
 
 def test_the_path_preview_needs_an_admin():
-    from aniworld.web.views import ADMIN_ENDPOINTS
+    from h0melab.web.views import ADMIN_ENDPOINTS
 
     assert "api.path_preview" in ADMIN_ENDPOINTS

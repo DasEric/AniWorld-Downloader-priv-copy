@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from aniworld.web import db
+from h0melab.web import db
 
 
 def episodes_of(queue_id):
@@ -35,7 +35,7 @@ def test_queueing_never_starts_a_real_worker_thread(client):
             "provider": "Vidoza",
         },
     )
-    running = [t.name for t in threading.enumerate() if "aniworld-queue" in t.name]
+    running = [t.name for t in threading.enumerate() if "h0melab-queue" in t.name]
     assert running == [], f"a queue worker outlived the request: {running}"
 
 
@@ -81,7 +81,7 @@ def test_a_body_without_episodes_is_refused(client):
 
 
 def test_english_sub_is_refused_when_disabled(client, monkeypatch):
-    monkeypatch.setenv("ANIWORLD_DISABLE_ENGLISH_SUB", "1")
+    monkeypatch.setenv("H0MELAB_DISABLE_ENGLISH_SUB", "1")
     response = client.post(
         "/api/download", json={"episodes": ["x"], "language": "English Sub"}
     )
@@ -90,7 +90,7 @@ def test_english_sub_is_refused_when_disabled(client, monkeypatch):
 
 
 def test_other_languages_still_work_when_english_sub_is_disabled(client, monkeypatch):
-    monkeypatch.setenv("ANIWORLD_DISABLE_ENGLISH_SUB", "1")
+    monkeypatch.setenv("H0MELAB_DISABLE_ENGLISH_SUB", "1")
     response = client.post(
         "/api/download", json={"episodes": ["x"], "language": "German Dub"}
     )
@@ -98,7 +98,7 @@ def test_other_languages_still_work_when_english_sub_is_disabled(client, monkeyp
 
 
 def test_english_sub_works_again_once_re_enabled(client, monkeypatch):
-    monkeypatch.setenv("ANIWORLD_DISABLE_ENGLISH_SUB", "1")
+    monkeypatch.setenv("H0MELAB_DISABLE_ENGLISH_SUB", "1")
     assert (
         client.post(
             "/api/download", json={"episodes": ["x"], "language": "English Sub"}
@@ -106,7 +106,7 @@ def test_english_sub_works_again_once_re_enabled(client, monkeypatch):
         == 403
     )
 
-    monkeypatch.setenv("ANIWORLD_DISABLE_ENGLISH_SUB", "0")
+    monkeypatch.setenv("H0MELAB_DISABLE_ENGLISH_SUB", "0")
     assert (
         client.post(
             "/api/download", json={"episodes": ["x"], "language": "English Sub"}
@@ -178,7 +178,7 @@ def test_queue_page_forces_the_episode_progress_assets_to_refresh(client):
 
 def test_progress_carries_the_numbers_the_queue_shows(client, queue_item):
     """The percentage and the speed under the bar come straight from here."""
-    from aniworld.models.common import common
+    from h0melab.models.common import common
 
     queue_item("Naruto")
     with common._ffmpeg_progress_lock:

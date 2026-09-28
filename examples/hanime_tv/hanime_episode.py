@@ -1,4 +1,4 @@
-from aniworld.models import HanimeTVEpisode
+from h0melab.models import HanimeTVEpisode
 
 url = "https://hanime.tv/videos/hentai/reika-wa-karei-na-boku-no-joou-4"
 

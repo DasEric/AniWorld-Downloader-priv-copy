@@ -6,10 +6,10 @@ from types import SimpleNamespace
 
 import pytest
 
-from aniworld.extractors.provider import gupload, moflixclick, veev, vidara
-from aniworld.models.common.provider_map import host_to_provider
-from aniworld.models.moflix_stream import series as moflix
-from aniworld.search import fetch_moflix_movies, query_moflix
+from h0melab.extractors.provider import gupload, moflixclick, veev, vidara
+from h0melab.models.common.provider_map import host_to_provider
+from h0melab.models.moflix_stream import series as moflix
+from h0melab.search import fetch_moflix_movies, query_moflix
 
 
 def _response(*, payload=None, text="", status_code=200):
@@ -155,7 +155,7 @@ def test_moflix_fallback_uses_the_matching_extractor(monkeypatch):
 
 
 def test_moflix_download_falls_back_after_unreachable_hls(monkeypatch):
-    from aniworld.models.common import common
+    from h0melab.models.common import common
 
     _moflix_api(monkeypatch)
     episode = moflix.MoflixEpisode(
@@ -192,7 +192,7 @@ def test_moflix_download_falls_back_after_unreachable_hls(monkeypatch):
 
 
 def test_single_moflix_provider_failure_explains_missing_fallback(monkeypatch):
-    from aniworld.models.common import common
+    from h0melab.models.common import common
 
     _moflix_api(monkeypatch)
     episode = moflix.MoflixEpisode(
@@ -404,7 +404,7 @@ def test_moflixclick_returns_all_usable_player_mirrors(monkeypatch):
 def test_moflix_download_tries_next_hls_mirror_after_runtime_failure(
     monkeypatch, tmp_path
 ):
-    from aniworld.models.common import common
+    from h0melab.models.common import common
 
     _moflix_api(monkeypatch)
     episode = moflix.MoflixEpisode(
@@ -441,9 +441,9 @@ def test_moflix_download_tries_next_hls_mirror_after_runtime_failure(
 def test_moflix_download_uses_other_provider_after_all_hls_mirrors_fail(
     monkeypatch, tmp_path
 ):
-    from aniworld.models.common import common
-    from aniworld.playwright import captcha
-    from aniworld.web import db
+    from h0melab.models.common import common
+    from h0melab.playwright import captcha
+    from h0melab.web import db
 
     _moflix_api(monkeypatch)
     episode = moflix.MoflixEpisode(
@@ -616,7 +616,7 @@ def test_vidara_uses_its_stream_api(monkeypatch):
 
 
 def test_veev_uses_player_handshake(monkeypatch):
-    from aniworld.playwright import captcha
+    from h0melab.playwright import captcha
 
     direct = "https://edge.veevcdn.co/signed/video"
     monkeypatch.setattr(captcha, "playwright_get_veev_stream_url", lambda _url: direct)
@@ -632,7 +632,7 @@ def test_veev_rejects_untrusted_embed_urls(url):
 
 @pytest.mark.parametrize("provider", ["Gupload", "MoflixClick", "Veev", "Vidara"])
 def test_moflix_provider_headers_avoid_encoded_playlists(provider):
-    from aniworld.config import PROVIDER_HEADERS_D
+    from h0melab.config import PROVIDER_HEADERS_D
 
     if provider in {"Gupload", "MoflixClick", "Veev"}:
         assert PROVIDER_HEADERS_D[provider]["Accept-Encoding"] == "identity"

@@ -2,8 +2,8 @@ from urllib.parse import urljoin
 
 import pytest
 
-from aniworld.config import STO_ALL_HOSTS, STO_IP
-from aniworld.models.s_to import SerienstreamSeason, SerienstreamSeries
+from h0melab.config import STO_ALL_HOSTS, STO_IP
+from h0melab.models.s_to import SerienstreamSeason, SerienstreamSeries
 
 BASES = [""] + [
     f"{scheme}://{prefix}{host}"

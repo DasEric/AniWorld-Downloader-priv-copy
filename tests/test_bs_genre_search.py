@@ -1,7 +1,7 @@
 import pytest
 
-from aniworld import search
-from aniworld.models.burningseries import series as bs
+from h0melab import search
+from h0melab.models.burningseries import series as bs
 
 
 def group(name, *titles):

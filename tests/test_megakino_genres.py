@@ -3,8 +3,8 @@ from types import SimpleNamespace
 import niquests
 import pytest
 
-from aniworld import search
-from aniworld.models.megakino import series
+from h0melab import search
+from h0melab.models.megakino import series
 
 
 @pytest.fixture

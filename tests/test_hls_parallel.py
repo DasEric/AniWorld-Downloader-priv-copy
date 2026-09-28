@@ -6,7 +6,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from aniworld.models.common import common, hls, transfer
+from h0melab.models.common import common, hls, transfer
 
 
 @pytest.fixture(autouse=True)
@@ -72,7 +72,7 @@ a1.ts
         "https://cdn.example/a1.ts": b"audio",
     }
 
-    monkeypatch.setenv("ANIWORLD_HLS_CONCURRENCY", "3")
+    monkeypatch.setenv("H0MELAB_HLS_CONCURRENCY", "3")
     monkeypatch.setattr(hls, "_fetch_text", lambda url, _headers: playlists[url])
 
     def fetch(url, _headers, on_bytes=None, check_cancelled=None):
@@ -116,7 +116,7 @@ v.ts
 """,
     }
     requested = []
-    monkeypatch.setenv("ANIWORLD_HLS_CONCURRENCY", "2")
+    monkeypatch.setenv("H0MELAB_HLS_CONCURRENCY", "2")
 
     def fetch_text(url, _headers):
         requested.append(url)
@@ -181,7 +181,7 @@ v.ts
     ],
 )
 def test_parallel_hls_scope(monkeypatch, page_url, stream_url, concurrency, expected):
-    monkeypatch.setenv("ANIWORLD_HLS_CONCURRENCY", concurrency)
+    monkeypatch.setenv("H0MELAB_HLS_CONCURRENCY", concurrency)
     owner = SimpleNamespace(url=page_url, selected_provider="MoflixClick")
     assert common._parallel_hls_enabled(owner, stream_url) is expected
 

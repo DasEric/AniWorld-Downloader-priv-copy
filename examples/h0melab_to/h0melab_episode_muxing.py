@@ -1,0 +1,26 @@
+from h0melab.models import AniworldEpisode
+
+url = "https://aniworld.to/anime/stream/highschool-dxd/staffel-1/episode-1"
+
+# ----------------------------
+# Language variations
+# ----------------------------
+variations = [
+    ("German Dub", "VOE"),  # German audio, no subtitles
+    ("English Sub", "VOE"),  # Japanese audio, English subtitles
+    ("German Sub", "VOE"),  # Japanese audio, German subtitles
+]
+
+print("Downloading all available variations into a single MKV file...")
+
+for language, provider in variations:
+    print(f"Downloading: {language} via {provider}")
+
+    episode = AniworldEpisode(
+        url=url, selected_language=language, selected_provider=provider
+    )
+
+    # Download will mux everything into one MKV file
+    episode.download()
+
+print("Done!")

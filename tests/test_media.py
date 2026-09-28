@@ -4,8 +4,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from aniworld.models.mangafire_to import series as mangafire
-from aniworld.web import db, media
+from h0melab.models.mangafire_to import series as mangafire
+from h0melab.web import db, media
 
 
 # ---------------------------------------------------------------------------
@@ -156,7 +156,7 @@ def test_custom_paths_are_scanned_too(episode_file, tmp_path):
 def test_language_folders_are_scanned_when_separation_is_on(
     monkeypatch, episode_file, downloads
 ):
-    monkeypatch.setenv("ANIWORLD_LANG_SEPARATION", "1")
+    monkeypatch.setenv("H0MELAB_LANG_SEPARATION", "1")
     episode_file("Naruto", 1, 1, base=downloads / "german-dub")
     assert media.downloaded_episodes(FakeSeries("Naruto")) == {(1, 1)}
 
@@ -167,7 +167,7 @@ def test_turning_separation_on_hides_titles_in_the_old_layout(
     """Files downloaded before the switch sit one level up and stop matching."""
     episode_file("Naruto", 1, 1)
     assert media.downloaded_episodes(FakeSeries("Naruto")) == {(1, 1)}
-    monkeypatch.setenv("ANIWORLD_LANG_SEPARATION", "1")
+    monkeypatch.setenv("H0MELAB_LANG_SEPARATION", "1")
     assert media.downloaded_episodes(FakeSeries("Naruto")) == set()
 
 
@@ -186,7 +186,7 @@ def test_loose_files_are_not_listed(downloads):
 
 
 def test_a_missing_root_is_not_an_error(monkeypatch, tmp_path):
-    monkeypatch.setenv("ANIWORLD_DOWNLOAD_PATH", str(tmp_path / "nope"))
+    monkeypatch.setenv("H0MELAB_DOWNLOAD_PATH", str(tmp_path / "nope"))
     assert media.downloaded_folder_names() == []
 
 
@@ -281,8 +281,8 @@ def test_burningseries_and_kinox_are_hidden_by_default(client):
 
 
 def test_the_flags_bring_the_tabs_back(client, monkeypatch):
-    monkeypatch.setenv("ANIWORLD_ENABLE_BURNINGSERIES", "1")
-    monkeypatch.setenv("ANIWORLD_ENABLE_KINOX", "1")
+    monkeypatch.setenv("H0MELAB_ENABLE_BURNINGSERIES", "1")
+    monkeypatch.setenv("H0MELAB_ENABLE_KINOX", "1")
     body = client.get("/").get_data(as_text=True)
     assert 'data-site="burningseries"' in body
     assert 'data-site="kinox"' in body
@@ -291,7 +291,7 @@ def test_the_flags_bring_the_tabs_back(client, monkeypatch):
 
 
 def test_one_flag_does_not_turn_on_the_other(client, monkeypatch):
-    monkeypatch.setenv("ANIWORLD_ENABLE_KINOX", "1")
+    monkeypatch.setenv("H0MELAB_ENABLE_KINOX", "1")
     body = client.get("/").get_data(as_text=True)
     assert 'data-site="kinox"' in body
     assert 'data-site="burningseries"' not in body

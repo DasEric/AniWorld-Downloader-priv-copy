@@ -8,8 +8,8 @@ Naruto / Naruto Shippuden, Overlord / Overlord II, Dragon Ball / Dragon Ball Z.
 
 import pytest
 
-from aniworld.web import autosync, media
-from aniworld.web.media import folder_matches_title
+from h0melab.web import autosync, media
+from h0melab.web.media import folder_matches_title
 
 
 class Series:
@@ -100,7 +100,7 @@ def test_titles_that_differ_only_by_a_stripped_character_share_a_folder():
     """ "Nisekoi" and "Nisekoi:" both become "Nisekoi" on disk, so the
     downloader already writes them into one folder. Telling them apart here
     would only disagree with where the files actually went."""
-    from aniworld.models.common.common import clean_title
+    from h0melab.models.common.common import clean_title
 
     assert clean_title("Nisekoi:") == clean_title("Nisekoi")
     assert folder_matches_title("Nisekoi (2014)", "Nisekoi:") is True
@@ -143,13 +143,13 @@ def test_a_title_matches_the_folder_the_downloader_made_for_it(title, folder):
 
 def test_the_stripped_characters_are_the_ones_the_downloader_removes():
     """If clean_title ever changes, this matcher has to change with it."""
-    from aniworld.models.common.common import FORBIDDEN_CHARS
+    from h0melab.models.common.common import FORBIDDEN_CHARS
 
     assert media.FOLDER_UNSAFE.pattern == FORBIDDEN_CHARS.pattern
 
 
 def test_a_real_title_survives_a_round_trip_through_clean_title():
-    from aniworld.models.common.common import clean_title
+    from h0melab.models.common.common import clean_title
 
     title = "Ao-chan Can’t Study!"
     folder = f"{clean_title(title)} (2019) [imdbid-tt9819822]"
@@ -199,7 +199,7 @@ def test_spacing_differences_do_not_break_the_match(title, folder):
 def test_a_stripped_character_is_removed_not_turned_into_a_space():
     """clean_title deletes the slash outright, so the folder is "FateZero".
     Matching has to do the same or it would miss its own folder."""
-    from aniworld.models.common.common import clean_title
+    from h0melab.models.common.common import clean_title
 
     assert clean_title("Fate/Zero") == "FateZero"
     assert folder_matches_title("FateZero (2011)", "Fate/Zero") is True
@@ -329,7 +329,7 @@ def _extract(instance, name):
 
 
 def test_serienstream_decodes_entities_in_the_title():
-    from aniworld.models.s_to.series import SerienstreamSeries
+    from h0melab.models.s_to.series import SerienstreamSeries
 
     series = _with_html(
         SerienstreamSeries, '<h1 class="h2 mb-1 fw-bold">It&#039;s Always Sunny</h1>'
@@ -338,7 +338,7 @@ def test_serienstream_decodes_entities_in_the_title():
 
 
 def test_megakino_decodes_entities_in_the_title():
-    from aniworld.models.megakino.series import MegaKinoEpisode
+    from h0melab.models.megakino.series import MegaKinoEpisode
 
     episode = _with_html(
         MegaKinoEpisode, '<meta itemprop="name" content="It&#039;s Complicated">'
@@ -348,7 +348,7 @@ def test_megakino_decodes_entities_in_the_title():
 
 
 def test_filmpalast_decodes_entities_in_the_title():
-    from aniworld.models.filmpalast_to.episode import FilmPalastEpisode
+    from h0melab.models.filmpalast_to.episode import FilmPalastEpisode
 
     episode = _with_html(
         FilmPalastEpisode, '<em itemprop="name">It&#039;s a Wonderful Life</em>'
@@ -359,7 +359,7 @@ def test_filmpalast_decodes_entities_in_the_title():
 
 def test_an_apostrophe_survives_all_the_way_to_the_folder_name():
     """The whole point: a decoded title has to stay intact through clean_title."""
-    from aniworld.models.common import clean_title
+    from h0melab.models.common import clean_title
 
     assert clean_title("It's Always Sunny in Philadelphia") == (
         "It's Always Sunny in Philadelphia"
@@ -368,7 +368,7 @@ def test_an_apostrophe_survives_all_the_way_to_the_folder_name():
 
 def test_an_undecoded_title_would_not_match_its_own_folder():
     """Why this bug costs a re-download, not just an ugly name."""
-    from aniworld.web.media import folder_matches_title
+    from h0melab.web.media import folder_matches_title
 
     assert folder_matches_title(
         "It's Always Sunny in Philadelphia (2005)", "It's Always Sunny in Philadelphia"
@@ -380,7 +380,7 @@ def test_an_undecoded_title_would_not_match_its_own_folder():
 
 
 def test_kinox_decodes_entities_in_the_title():
-    from aniworld.models.kinox.series import KinoxSeries
+    from h0melab.models.kinox.series import KinoxSeries
 
     series = _with_html(
         KinoxSeries,
@@ -392,7 +392,7 @@ def test_kinox_decodes_entities_in_the_title():
 
 
 def test_burningseries_decodes_entities_in_the_title():
-    from aniworld.models.burningseries.series import BurningSeriesSeries
+    from h0melab.models.burningseries.series import BurningSeriesSeries
 
     series = _with_html(
         BurningSeriesSeries, "<h2>It&#039;s Always Sunny</h2>", "title", "slug"
@@ -407,11 +407,11 @@ def test_every_provider_decodes_entities_in_its_title_path():
     title property did not decode, so a grep for the word passed while the bug
     was live. This drives each provider's real title extraction instead.
     """
-    from aniworld.models.burningseries.series import BurningSeriesSeries
-    from aniworld.models.filmpalast_to.episode import FilmPalastEpisode
-    from aniworld.models.kinox.series import KinoxSeries
-    from aniworld.models.megakino.series import MegaKinoEpisode
-    from aniworld.models.s_to.series import SerienstreamSeries
+    from h0melab.models.burningseries.series import BurningSeriesSeries
+    from h0melab.models.filmpalast_to.episode import FilmPalastEpisode
+    from h0melab.models.kinox.series import KinoxSeries
+    from h0melab.models.megakino.series import MegaKinoEpisode
+    from h0melab.models.s_to.series import SerienstreamSeries
 
     cases = [
         (

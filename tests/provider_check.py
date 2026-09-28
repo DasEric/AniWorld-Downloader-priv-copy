@@ -6,7 +6,7 @@ here still turns CI red rather than hiding until someone runs a check by hand.
 
 One file per source site lives next to this one:
 
-    tests/test_providers_aniworld.py       tests/test_providers_kinox.py
+    tests/test_providers_h0melab.py        tests/test_providers_kinox.py
     tests/test_providers_serienstream.py   tests/test_providers_burningseries.py
     tests/test_providers_megakino.py       tests/test_providers_cineby.py
     tests/test_providers_filmpalast.py     tests/test_providers_hanimetv.py
@@ -56,7 +56,7 @@ def extractors():
     Read from the registry rather than listed by hand, so a newly added hoster
     cannot be silently missed.
     """
-    from aniworld.extractors import provider_functions
+    from h0melab.extractors import provider_functions
 
     found = {}
     for name, fn in provider_functions.items():
@@ -72,7 +72,7 @@ def extractors():
 
 def canonical(key):
     """The name the sites print, e.g. 'voe' -> 'VOE'. Falls back to the key."""
-    from aniworld.models.common.provider_map import _ALIASES
+    from h0melab.models.common.provider_map import _ALIASES
 
     for _, name in _ALIASES:
         if name.lower() == key.lower():
@@ -145,7 +145,7 @@ def line(status, label, detail, took=None):
 # ---------------------------------------------------------------------------
 def first_episode(site_url):
     """An episode for `site_url`, resolving through series/season when needed."""
-    from aniworld.providers import resolve_provider
+    from h0melab.providers import resolve_provider
 
     provider = resolve_provider(site_url)
     kwargs = {"url": site_url}
@@ -179,7 +179,7 @@ def hosters_of(episode):
     produced labels the models rejected, which looked like a broken site when
     it was only this code being wrong.
     """
-    from aniworld.web import media
+    from h0melab.web import media
 
     mapping = media.provider_map(getattr(episode, "provider_data", None))
     return [(label, name) for label, names in mapping.items() for name in names]
@@ -204,7 +204,7 @@ def run_site(site_name, fetch_name, only=None):
     The title is discovered live rather than hardcoded, so a title being taken
     down cannot quietly turn this check into a no-op.
     """
-    from aniworld import search
+    from h0melab import search
 
     registry = extractors()
     stubs = {k for k, v in registry.items() if is_stub(v["direct"])}
@@ -307,7 +307,7 @@ def run_image_site(site_name, fetch_name):
     registry would say nothing. What matters is that a title still resolves to
     a chapter and that chapter to real page image URLs.
     """
-    from aniworld.providers import resolve_provider
+    from h0melab.providers import resolve_provider
 
     results = []
     print(f"\n=== {site_name} ===\n")
@@ -382,7 +382,7 @@ def run_hosters(only=None):
 
 def hanime_trending():
     """Hanime's trending feed, shaped like the other browse fetchers."""
-    from aniworld.extractors.provider.hanime_tv import fetch_hanime_trending
+    from h0melab.extractors.provider.hanime_tv import fetch_hanime_trending
 
     return [
         {"url": f"https://hanime.tv/videos/hentai/{hit['slug']}"}
@@ -395,7 +395,7 @@ def mangafire_trending():
     """MangaFire's top titles, shaped like the other browse fetchers."""
     import niquests
 
-    from aniworld.models.mangafire_to.vrf import sign_url
+    from h0melab.models.mangafire_to.vrf import sign_url
 
     response = niquests.get(sign_url("https://mangafire.to/api/top-titles"), timeout=20)
     response.raise_for_status()

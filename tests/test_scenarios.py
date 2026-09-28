@@ -8,7 +8,7 @@ import json
 
 import pytest
 
-from aniworld.web import db, library, media, paths, settings_store, worker
+from h0melab.web import db, library, media, paths, settings_store, worker
 
 
 @pytest.fixture
@@ -174,7 +174,7 @@ def test_changing_the_format_does_not_disturb_finished_downloads(client, episode
 
 def test_a_queued_item_uses_the_provider_it_was_queued_with(client):
     """Changing the fallback order later must not rewrite queued items."""
-    from aniworld.web.media import WORKING_PROVIDERS
+    from h0melab.web.media import WORKING_PROVIDERS
 
     queue_id = client.post(
         "/api/download", json={"episodes": ["ep1"], "provider": "Vidoza"}
@@ -495,19 +495,19 @@ def test_the_home_page_shows_the_sites_that_are_on(client):
 
 
 def test_a_site_switched_off_loses_its_tab(client, monkeypatch):
-    monkeypatch.setenv("ANIWORLD_ENABLE_MEGAKINO", "0")
+    monkeypatch.setenv("H0MELAB_ENABLE_MEGAKINO", "0")
     assert "megakino" not in _tabs(client)
 
 
 def test_a_site_switched_off_loses_its_browse_rows(client, monkeypatch):
-    monkeypatch.setenv("ANIWORLD_ENABLE_MANGAFIRE", "0")
+    monkeypatch.setenv("H0MELAB_ENABLE_MANGAFIRE", "0")
     body = client.get("/").get_data(as_text=True)
     assert 'data-row="mangafire_trending"' not in body
     assert 'data-row="new_animes"' in body, "the others stay"
 
 
 def test_a_site_switched_on_gains_its_tab_and_rows(client, monkeypatch):
-    monkeypatch.setenv("ANIWORLD_ENABLE_KINOX", "1")
+    monkeypatch.setenv("H0MELAB_ENABLE_KINOX", "1")
     body = client.get("/").get_data(as_text=True)
     assert "kinox" in _tabs(client)
     assert 'data-row="kinox_movies"' in body
@@ -515,7 +515,7 @@ def test_a_site_switched_on_gains_its_tab_and_rows(client, monkeypatch):
 
 def test_the_first_tab_is_whatever_is_still_there(client, monkeypatch):
     """home.js opens on the first tab, so it must not be a hidden one."""
-    monkeypatch.setenv("ANIWORLD_ENABLE_ANIWORLD", "0")
+    monkeypatch.setenv("H0MELAB_ENABLE_ANIWORLD", "0")
     assert _tabs(client)[0] == "sto"
 
 
@@ -530,7 +530,7 @@ def test_the_toggles_on_the_settings_page_match_the_api(client):
 
 
 def test_every_site_has_a_checkbox_on_the_settings_page(client):
-    from aniworld.web.media import SITE_KEYS
+    from h0melab.web.media import SITE_KEYS
 
     body = client.get("/settings").get_data(as_text=True)
     for site in SITE_KEYS:
@@ -550,7 +550,7 @@ def test_the_settings_page_is_split_into_sections(client):
 
 
 def test_the_users_section_only_exists_with_accounts(client, auth_client):
-    from aniworld.web import db
+    from h0melab.web import db
 
     assert 'id="pane-users"' not in client.get("/settings").get_data(as_text=True)
 
@@ -566,7 +566,7 @@ def test_every_site_says_what_it_is(client):
     import re
 
     body = client.get("/settings").get_data(as_text=True)
-    from aniworld.web.media import SITE_KEYS
+    from h0melab.web.media import SITE_KEYS
 
     for site in SITE_KEYS:
         assert f'data-i18n="settings.enable_{site}_hint"' in body, site

@@ -1,7 +1,7 @@
 import pytest
 
-from aniworld.models.burningseries import series as bs
-from aniworld.models.filmpalast_to import FilmPalastEpisode
+from h0melab.models.burningseries import series as bs
+from h0melab.models.filmpalast_to import FilmPalastEpisode
 
 
 @pytest.mark.parametrize(

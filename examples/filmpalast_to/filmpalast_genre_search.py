@@ -1,4 +1,4 @@
-from aniworld.search import fetch_filmpalast_genres, query_filmpalast
+from h0melab.search import fetch_filmpalast_genres, query_filmpalast
 
 # limit caps the result count; None keeps the site's existing scope, 0 skips fetching.
 # Available genres (09/2026 as of right now):

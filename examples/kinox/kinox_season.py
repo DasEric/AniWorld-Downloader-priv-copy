@@ -1,4 +1,4 @@
-from aniworld.models import KinoxSeries
+from h0melab.models import KinoxSeries
 
 url = "https://kinox.to/Stream/Avatar-Der_Herr_der_Elemente.html"
 

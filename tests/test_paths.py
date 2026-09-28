@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from aniworld.web import db, paths
+from h0melab.web import db, paths
 
 
 # ---------------------------------------------------------------------------
@@ -23,17 +23,17 @@ def test_a_tilde_is_expanded():
 
 
 def test_the_default_path_comes_from_the_setting(monkeypatch, tmp_path):
-    monkeypatch.setenv("ANIWORLD_DOWNLOAD_PATH", str(tmp_path / "media"))
+    monkeypatch.setenv("H0MELAB_DOWNLOAD_PATH", str(tmp_path / "media"))
     assert paths.default_download_path() == tmp_path / "media"
 
 
 def test_an_unset_path_falls_back_to_downloads(monkeypatch):
-    monkeypatch.delenv("ANIWORLD_DOWNLOAD_PATH", raising=False)
+    monkeypatch.delenv("H0MELAB_DOWNLOAD_PATH", raising=False)
     assert paths.default_download_path() == Path.home() / "Downloads"
 
 
 def test_a_blank_path_falls_back_too(monkeypatch):
-    monkeypatch.setenv("ANIWORLD_DOWNLOAD_PATH", "   ")
+    monkeypatch.setenv("H0MELAB_DOWNLOAD_PATH", "   ")
     assert paths.default_download_path() == Path.home() / "Downloads"
 
 
@@ -70,7 +70,7 @@ def test_without_separation_the_downloader_decides():
 
 
 def test_separation_adds_the_language_folder(monkeypatch, downloads):
-    monkeypatch.setenv("ANIWORLD_LANG_SEPARATION", "1")
+    monkeypatch.setenv("H0MELAB_LANG_SEPARATION", "1")
     assert paths.target_path("German Sub") == str(downloads / "german-sub")
 
 
@@ -80,7 +80,7 @@ def test_a_custom_path_is_used_as_is(tmp_path):
 
 
 def test_a_custom_path_also_gets_language_folders(monkeypatch, tmp_path):
-    monkeypatch.setenv("ANIWORLD_LANG_SEPARATION", "1")
+    monkeypatch.setenv("H0MELAB_LANG_SEPARATION", "1")
     path_id = db.add_custom_path("Movies", str(tmp_path / "movies"))
     assert paths.target_path("English Dub", path_id) == str(
         tmp_path / "movies" / "english-dub"
@@ -97,7 +97,7 @@ def test_a_deleted_custom_path_falls_back_to_the_default(tmp_path, downloads):
 
 
 def test_a_deleted_custom_path_falls_back_with_separation_on(monkeypatch, downloads):
-    monkeypatch.setenv("ANIWORLD_LANG_SEPARATION", "1")
+    monkeypatch.setenv("H0MELAB_LANG_SEPARATION", "1")
     path_id = db.add_custom_path("Movies", "/tmp/gone")
     db.remove_custom_path(path_id)
     assert paths.target_path("German Dub", path_id) == str(downloads / "german-dub")
@@ -148,13 +148,13 @@ def test_without_separation_scanning_uses_the_roots(downloads, tmp_path):
 
 
 def test_with_separation_scanning_uses_the_language_folders(monkeypatch, downloads):
-    monkeypatch.setenv("ANIWORLD_LANG_SEPARATION", "1")
+    monkeypatch.setenv("H0MELAB_LANG_SEPARATION", "1")
     bases = paths.scan_bases()
     assert len(bases) == len(paths.ALL_LANG_FOLDERS)
     assert downloads / "german-dub" in bases
 
 
 def test_separation_multiplies_every_root(monkeypatch, tmp_path):
-    monkeypatch.setenv("ANIWORLD_LANG_SEPARATION", "1")
+    monkeypatch.setenv("H0MELAB_LANG_SEPARATION", "1")
     db.add_custom_path("Movies", str(tmp_path / "movies"))
     assert len(paths.scan_bases()) == 2 * len(paths.ALL_LANG_FOLDERS)

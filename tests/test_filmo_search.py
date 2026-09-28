@@ -3,7 +3,7 @@ from types import SimpleNamespace
 import niquests
 import pytest
 
-from aniworld import search
+from h0melab import search
 
 
 def cards(*slugs):

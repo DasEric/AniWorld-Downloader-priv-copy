@@ -9,8 +9,8 @@ import json
 
 import pytest
 
-from aniworld.models.common import common
-from aniworld.web import db, worker
+from h0melab.models.common import common
+from h0melab.web import db, worker
 
 
 class FakeEpisode:
@@ -129,7 +129,7 @@ def test_progress_is_visible_while_it_runs(queue_item, run_worker):
 def test_hls_concurrency_change_applies_from_the_next_episode(
     monkeypatch, queue_item, run_worker
 ):
-    monkeypatch.setenv("ANIWORLD_HLS_CONCURRENCY", "8")
+    monkeypatch.setenv("H0MELAB_HLS_CONCURRENCY", "8")
     seen = []
     queue_id = queue_item(episodes=["https://x/ep1", "https://x/ep2"])
     db.set_queue_status(queue_id, "running")
@@ -137,7 +137,7 @@ def test_hls_concurrency_change_applies_from_the_next_episode(
     def watch(url):
         seen.append(common._episode_hls_concurrency())
         if url.endswith("ep1"):
-            monkeypatch.setenv("ANIWORLD_HLS_CONCURRENCY", "10")
+            monkeypatch.setenv("H0MELAB_HLS_CONCURRENCY", "10")
             assert common._episode_hls_concurrency() == 8
 
     run_worker(queue_id, on_download=watch)
@@ -290,7 +290,7 @@ def test_no_target_path_is_passed_by_default(queue_item, run_worker):
 def test_language_separation_reaches_the_downloader(
     queue_item, run_worker, monkeypatch, downloads
 ):
-    monkeypatch.setenv("ANIWORLD_LANG_SEPARATION", "1")
+    monkeypatch.setenv("H0MELAB_LANG_SEPARATION", "1")
     queue_id = queue_item(episodes=["https://x/ep1"], language="German Sub")
     db.set_queue_status(queue_id, "running")
     calls = run_worker(queue_id)
@@ -310,7 +310,7 @@ def test_the_path_is_resolved_when_the_download_starts_not_when_queued(
 ):
     """A setting changed while the item waited in the queue still applies."""
     queue_id = queue_item(episodes=["https://x/ep1"])
-    monkeypatch.setenv("ANIWORLD_LANG_SEPARATION", "1")
+    monkeypatch.setenv("H0MELAB_LANG_SEPARATION", "1")
     db.set_queue_status(queue_id, "running")
     calls = run_worker(queue_id)
     assert calls[0]["selected_path"] == str(downloads / "german-dub")

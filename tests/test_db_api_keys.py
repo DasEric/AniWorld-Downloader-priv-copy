@@ -4,7 +4,7 @@ import sqlite3
 
 import pytest
 
-from aniworld.web import apikeys, db
+from h0melab.web import apikeys, db
 
 
 def test_generated_keys_are_prefixed_and_unique():
@@ -43,7 +43,7 @@ def test_a_fresh_key_verifies(api_key):
 
 
 def test_an_unknown_key_does_not_verify():
-    assert db.verify_api_key(apikeys.hash_key("awd_not-a-real-key")) is None
+    assert db.verify_api_key(apikeys.hash_key("h0d_not-a-real-key")) is None
 
 
 @pytest.mark.parametrize("scope", apikeys.SCOPES)
@@ -54,13 +54,13 @@ def test_every_scope_can_be_stored(api_key, scope):
 
 def test_an_invalid_scope_is_refused_by_the_schema():
     with pytest.raises(sqlite3.IntegrityError):
-        db.create_api_key("bad", "hash", "awd_x", "superuser")
+        db.create_api_key("bad", "hash", "h0d_x", "superuser")
 
 
 def test_key_hashes_are_unique():
-    db.create_api_key("one", "same-hash", "awd_a", "read")
+    db.create_api_key("one", "same-hash", "h0d_a", "read")
     with pytest.raises(sqlite3.IntegrityError):
-        db.create_api_key("two", "same-hash", "awd_b", "read")
+        db.create_api_key("two", "same-hash", "h0d_b", "read")
 
 
 # ---------------------------------------------------------------------------
@@ -179,5 +179,5 @@ def test_deleting_one_key_leaves_the_others(api_key):
 
 
 def test_the_creator_is_recorded():
-    db.create_api_key("ci", "hash", "awd_x", "read", created_by="alice")
+    db.create_api_key("ci", "hash", "h0d_x", "read", created_by="alice")
     assert db.list_api_keys()[0]["created_by"] == "alice"

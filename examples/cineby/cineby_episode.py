@@ -1,4 +1,4 @@
-from aniworld.models import CinebySeries
+from h0melab.models import CinebySeries
 
 url = "https://www.cineby.at/tv/1396"
 

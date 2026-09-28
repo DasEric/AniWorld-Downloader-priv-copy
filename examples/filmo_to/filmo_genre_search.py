@@ -1,4 +1,4 @@
-from aniworld.search import query_filmo
+from h0melab.search import query_filmo
 
 # Genre IDs (09/2026 as of right now):
 # 1 Action, 2 Adventure, 3 Animation, 4 Comedy, 5 Crime, 6 Documentary,

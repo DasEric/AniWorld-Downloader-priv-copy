@@ -17,10 +17,10 @@ What problem does this solve, or what gets better?
 
 Be specific if you can.
 
-- CLI example (if relevant):
+- Browser or API example (if relevant):
 
 ```bash
-aniworld ...
+curl http://localhost:8080/api/ping
 ```
 
 - Expected output/behavior:

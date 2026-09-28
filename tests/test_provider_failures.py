@@ -5,9 +5,9 @@ from unittest.mock import MagicMock, Mock
 
 import pytest
 
-from aniworld.extractors.provider import voe
-from aniworld.models.s_to import episode as sto
-from aniworld.playwright import captcha
+from h0melab.extractors.provider import voe
+from h0melab.models.s_to import episode as sto
+from h0melab.playwright import captcha
 
 
 @pytest.mark.parametrize("status", [404, 410])
@@ -53,7 +53,7 @@ def test_temporary_voe_failure_still_retries(monkeypatch):
 def test_missing_chromium_error_survives_modal_solver(monkeypatch, tmp_path):
     from patchright import sync_api
 
-    from aniworld import autodeps
+    from h0melab import autodeps
 
     runtime = MagicMock()
     runtime.chromium.executable_path = str(tmp_path / "missing-chromium")

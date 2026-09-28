@@ -52,8 +52,12 @@ Documentation = "https://github.com/DasEric/H0melab-Downloader-V2#readme"
 Changelog = "https://github.com/DasEric/H0melab-Downloader-V2/commits"
 Issues = "https://github.com/DasEric/H0melab-Downloader-V2/issues"
 
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["h0melab*"]
+
 [tool.setuptools.package-data]
-aniworld = [
+h0melab = [
   ".env.example",
   "aniskip/scripts/*.lua",
   "web/templates/*.html",
@@ -68,9 +72,7 @@ aniworld = [
 ]
 
 [project.scripts]
-h0melab-downloader = "aniworld.web_entry:main"
-# Upgrade compatibility: the previous launcher now starts the same browser UI.
-aniworld = "aniworld.web_entry:main"
+h0melab-downloader = "h0melab.web_entry:main"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

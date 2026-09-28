@@ -1,5 +1,5 @@
-from aniworld.config import Audio, Subtitles
-from aniworld.models import SerienstreamEpisode
+from h0melab.config import Audio, Subtitles
+from h0melab.models import SerienstreamEpisode
 
 episode_url = "https://serienstream.to/serie/american-horror-story-die-dunkle-seite-in-dir/staffel-1/episode-1"
 

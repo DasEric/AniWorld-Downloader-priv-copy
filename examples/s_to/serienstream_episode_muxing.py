@@ -1,4 +1,4 @@
-from aniworld.models import SerienstreamEpisode
+from h0melab.models import SerienstreamEpisode
 
 url = "https://serienstream.to/serie/american-horror-story-die-dunkle-seite-in-dir/staffel-1/episode-1"
 

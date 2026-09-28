@@ -3,8 +3,8 @@ from types import SimpleNamespace
 import niquests
 import pytest
 
-from aniworld import search
-from aniworld.models.kinox import series
+from h0melab import search
+from h0melab.models.kinox import series
 
 
 def test_top_100_preserves_ranking_and_uses_configured_domain(monkeypatch):

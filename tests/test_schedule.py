@@ -8,8 +8,8 @@ from datetime import datetime
 
 import pytest
 
-from aniworld.web import schedule
-from aniworld.web.schedule import ScheduleError
+from h0melab.web import schedule
+from h0melab.web.schedule import ScheduleError
 
 # A Friday afternoon, the moment every "next run" below is measured from
 FRIDAY = datetime(2026, 8, 21, 15, 30)

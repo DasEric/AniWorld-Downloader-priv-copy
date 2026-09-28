@@ -1,4 +1,4 @@
-from aniworld.search import query_s_to
+from h0melab.search import query_s_to
 
 # limit caps the result count; None keeps the site's existing scope, 0 skips fetching.
 # Available genres (09/2026 as of right now):

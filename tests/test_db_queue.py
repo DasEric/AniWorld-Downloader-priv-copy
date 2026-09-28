@@ -5,7 +5,7 @@ import time
 
 import pytest
 
-from aniworld.web import db
+from h0melab.web import db
 
 
 # ---------------------------------------------------------------------------

@@ -1,4 +1,4 @@
-from aniworld.models import MangaFireToSeries
+from h0melab.models import MangaFireToSeries
 
 url = "https://mangafire.to/title/zlwvm-darling-in-the-franxx"
 
