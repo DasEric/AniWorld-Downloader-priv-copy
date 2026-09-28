@@ -1987,7 +1987,7 @@ def syncplay(self):
         try:
             syncplay_username = getpass.getuser()
         except Exception:
-            syncplay_username = "AniWorld-Downloader"
+            syncplay_username = "H0melab-Downloader"
 
     room = "AniWorld"
     file_name = self._file_name.replace(" ", "_")

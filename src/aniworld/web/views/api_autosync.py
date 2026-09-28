@@ -60,7 +60,7 @@ def autosync_run():
         return jsonify({"error": "A sync is already running"}), 409
 
     threading.Thread(
-        target=_run_quietly, name="aniworld-autosync-manual", daemon=True
+        target=_run_quietly, name="h0melab-autosync-manual", daemon=True
     ).start()
     return jsonify({"ok": True, "started": True})
 

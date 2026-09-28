@@ -8,12 +8,13 @@ import time
 
 from werkzeug.security import check_password_hash, generate_password_hash
 
-from ..config import ANIWORLD_CONFIG_DIR
+from ..config import H0MELAB_CONFIG_DIR
 from ..logger import get_logger
 
 logger = get_logger(__name__)
 
-DB_PATH = ANIWORLD_CONFIG_DIR / "aniworld.db"
+DB_PATH = H0MELAB_CONFIG_DIR / "h0melab.db"
+LEGACY_DB_PATH = H0MELAB_CONFIG_DIR / "aniworld.db"
 
 QUEUE_STATUSES = ("queued", "running", "completed", "failed", "cancelled")
 
@@ -60,7 +61,17 @@ class _Connection(sqlite3.Connection):
 
 
 def get_db():
-    ANIWORLD_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    H0MELAB_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    if not DB_PATH.exists() and LEGACY_DB_PATH.exists():
+        # SQLite's backup API also includes committed WAL data. Keep the old
+        # file as a rollback copy instead of renaming or deleting it.
+        source = sqlite3.connect(str(LEGACY_DB_PATH), timeout=60.0)
+        target = sqlite3.connect(str(DB_PATH), timeout=60.0)
+        try:
+            source.backup(target)
+        finally:
+            target.close()
+            source.close()
     conn = sqlite3.connect(str(DB_PATH), timeout=60.0, factory=_Connection)
     conn.row_factory = sqlite3.Row
     try:
@@ -234,6 +245,31 @@ _SCHEMA = (
         value TEXT
     )
     """,
+    """
+    CREATE TABLE IF NOT EXISTS upcoming_media (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        media_type TEXT NOT NULL DEFAULT 'movie'
+            CHECK(media_type IN ('movie','tv')),
+        tmdb_id INTEGER NOT NULL,
+        title TEXT NOT NULL,
+        original_title TEXT NOT NULL DEFAULT '',
+        release_date TEXT NOT NULL DEFAULT '',
+        release_year INTEGER NOT NULL DEFAULT 0,
+        poster_path TEXT,
+        overview TEXT NOT NULL DEFAULT '',
+        language TEXT NOT NULL DEFAULT 'German Dub',
+        provider TEXT NOT NULL DEFAULT 'VOE',
+        custom_path_id INTEGER,
+        status TEXT NOT NULL DEFAULT 'waiting',
+        matched_url TEXT,
+        queue_id INTEGER,
+        last_checked_at TEXT,
+        last_message TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        UNIQUE(media_type, tmdb_id)
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_upcoming_media_status ON upcoming_media (status, release_date)",
 )
 
 # Columns added after the first release. Older databases get them via ALTER.
@@ -274,6 +310,29 @@ def init_db():
                 if column not in existing:
                     conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {spec}")
         conn.execute("UPDATE download_queue SET position = id WHERE position = 0")
+        # v5 stored movie-only watchlist rows in upcoming_movies. Copying with
+        # the original id keeps every existing bookmark and queue relation.
+        migrated = conn.execute(
+            "SELECT value FROM upcoming_state WHERE key = 'v2_media_migrated'"
+        ).fetchone()
+        if not migrated:
+            conn.execute(
+                """
+                INSERT OR IGNORE INTO upcoming_media
+                    (id, media_type, tmdb_id, title, original_title, release_date,
+                     release_year, poster_path, overview, language, provider,
+                     custom_path_id, status, matched_url, queue_id,
+                     last_checked_at, last_message, created_at)
+                SELECT id, 'movie', tmdb_id, title, original_title, release_date,
+                       release_year, poster_path, overview, language, provider,
+                       custom_path_id, status, matched_url, queue_id,
+                       last_checked_at, last_message, created_at
+                FROM upcoming_movies
+                """
+            )
+            conn.execute(
+                "INSERT INTO upcoming_state(key, value) VALUES ('v2_media_migrated', datetime('now'))"
+            )
     _initialized = True
     _bootstrap_admin()
 
@@ -496,20 +555,20 @@ def add_to_queue(
 
 def list_upcoming_movies():
     with session() as conn:
-        return _rows(conn, "SELECT * FROM upcoming_movies ORDER BY release_date, id")
+        return _rows(conn, "SELECT * FROM upcoming_media ORDER BY release_date, id")
 
 
 def get_upcoming_movie(movie_id):
     with session() as conn:
-        row = conn.execute("SELECT * FROM upcoming_movies WHERE id = ?", (movie_id,)).fetchone()
+        row = conn.execute("SELECT * FROM upcoming_media WHERE id = ?", (movie_id,)).fetchone()
         return dict(row) if row else None
 
 
 def add_upcoming_movie(movie, language="German Dub", provider="VOE", custom_path_id=None):
     with session() as conn:
         cur = conn.execute(
-            "INSERT INTO upcoming_movies (tmdb_id,title,original_title,release_date,release_year,poster_path,overview,language,provider,custom_path_id) VALUES (?,?,?,?,?,?,?,?,?,?)",
-            (movie["tmdb_id"], movie["title"], movie.get("original_title", ""),
+            "INSERT INTO upcoming_media (media_type,tmdb_id,title,original_title,release_date,release_year,poster_path,overview,language,provider,custom_path_id) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+            (movie.get("media_type", "movie"), movie["tmdb_id"], movie["title"], movie.get("original_title", ""),
              movie["release_date"], movie["release_year"], movie.get("poster_path"),
              movie.get("overview", ""), language, provider, custom_path_id),
         )
@@ -523,14 +582,14 @@ def update_upcoming_movie(movie_id, **fields):
         return
     with session() as conn:
         conn.execute(
-            f"UPDATE upcoming_movies SET {', '.join(f'{key} = ?' for key in values)} WHERE id = ?",
+            f"UPDATE upcoming_media SET {', '.join(f'{key} = ?' for key in values)} WHERE id = ?",
             (*values.values(), movie_id),
         )
 
 
 def delete_upcoming_movie(movie_id):
     with session() as conn:
-        conn.execute("DELETE FROM upcoming_movies WHERE id = ?", (movie_id,))
+        conn.execute("DELETE FROM upcoming_media WHERE id = ?", (movie_id,))
 
 
 def upcoming_state_get(key):
@@ -548,7 +607,7 @@ def finish_upcoming_queue(queue_id, queue_status):
     status = "downloaded" if queue_status == "completed" else "error"
     message = "Download completed" if status == "downloaded" else "Queued download failed"
     with session() as conn:
-        conn.execute("UPDATE upcoming_movies SET status = ?, last_message = ? WHERE queue_id = ?",
+        conn.execute("UPDATE upcoming_media SET status = ?, last_message = ? WHERE queue_id = ?",
                      (status, message, queue_id))
 
 

@@ -101,6 +101,9 @@
     el("hlsConcurrency").value = settings.hls_concurrency || 8;
     el("hlsConcurrency").min = settings.hls_concurrency_min || 1;
     el("hlsConcurrency").max = settings.hls_concurrency_max || 32;
+    el("upcomingChecksPerDay").value = settings.upcoming_checks_per_day || 1;
+    el("upcomingChecksPerDay").min = settings.upcoming_checks_per_day_min || 1;
+    el("upcomingChecksPerDay").max = settings.upcoming_checks_per_day_max || 24;
     el("tmdbApiKey").value = settings.tmdb && settings.tmdb.key_set ? SECRET_PLACEHOLDER : "";
 
     document.querySelectorAll("[data-setting]").forEach((box) => {
@@ -135,6 +138,10 @@
 
   el("saveHlsConcurrencyBtn").addEventListener("click", () => {
     save({ hls_concurrency: el("hlsConcurrency").value });
+  });
+
+  el("saveUpcomingChecksBtn").addEventListener("click", () => {
+    save({ upcoming_checks_per_day: el("upcomingChecksPerDay").value });
   });
 
   el("saveTmdbBtn").addEventListener("click", async () => {

@@ -14,7 +14,7 @@ from flask import g, jsonify, request
 from . import db
 
 HEADER = "X-API-Key"
-KEY_PREFIX = "awd_"
+KEY_PREFIX = "h0d_"
 
 # read  -> GET only
 # write -> everything a normal user can do (search, download, queue)

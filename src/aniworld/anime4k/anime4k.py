@@ -4,12 +4,12 @@ from pathlib import Path
 
 try:
     from ..common import get_latest_github_release, unzip
-    from ..config import ANIWORLD_CONFIG_DIR, GLOBAL_SESSION, MPV_CONFIG_DIR, logger
+    from ..config import GLOBAL_SESSION, H0MELAB_CONFIG_DIR, MPV_CONFIG_DIR, logger
 except ImportError:
     from aniworld.common import get_latest_github_release, unzip
     from aniworld.config import (
-        ANIWORLD_CONFIG_DIR,
         GLOBAL_SESSION,
+        H0MELAB_CONFIG_DIR,
         MPV_CONFIG_DIR,
         logger,
     )
@@ -46,7 +46,7 @@ def get_anime4k_urls():
 
 def download_anime4k(target_dir=None, mode="high"):
     """Download Anime4K GLSL assets only if not already extracted."""
-    target_dir = Path(target_dir or ANIWORLD_CONFIG_DIR) / "Anime4K"
+    target_dir = Path(target_dir or H0MELAB_CONFIG_DIR) / "Anime4K"
     target_dir.mkdir(parents=True, exist_ok=True)
 
     if mode == "remove":
@@ -82,7 +82,7 @@ def download_anime4k(target_dir=None, mode="high"):
 
 def extract_anime4k(files, target_dir=None):
     """Extract downloaded zip files and clean up."""
-    target_dir = Path(target_dir or ANIWORLD_CONFIG_DIR) / "Anime4K"
+    target_dir = Path(target_dir or H0MELAB_CONFIG_DIR) / "Anime4K"
     extracted_dirs = []
 
     for filepath in files:
@@ -142,7 +142,7 @@ def setup_anime4k(mode="low"):
         logger.error(f"Unknown mode: {mode}. Valid modes: {list(mode_folders.keys())}")
         return
 
-    source_dir = Path(ANIWORLD_CONFIG_DIR) / "Anime4K" / mode_folders[mode]
+    source_dir = Path(H0MELAB_CONFIG_DIR) / "Anime4K" / mode_folders[mode]
     if not source_dir.exists():
         logger.warning(f"{source_dir} does not exist. Nothing to set up.")
         return

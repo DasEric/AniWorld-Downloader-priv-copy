@@ -1,5 +1,4 @@
 include src/aniworld/.env.example
-include src/aniworld/ascii/ASCII.txt
 include src/aniworld/aniskip/scripts/aniskip.lua
 include src/aniworld/aniskip/scripts/autoexit.lua
 include src/aniworld/aniskip/scripts/autostart.lua

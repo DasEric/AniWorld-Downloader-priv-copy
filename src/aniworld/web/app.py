@@ -178,7 +178,7 @@ def create_app(auth_enabled=False, sso_enabled=False, force_sso=False):
             "page_name": (request.endpoint or "").rsplit(".", 1)[-1],
             "library_enabled": settings_store.library_enabled(),
             "autosync_enabled": settings_store.autosync_enabled(),
-            "github_url": "https://github.com/phoenixthrush/AniWorld-Downloader",
+            "github_url": "https://github.com/DasEric/H0melab-Downloader-V2",
         }
 
     @app.after_request
@@ -271,7 +271,7 @@ def start_web_ui(
 
     display_host = "localhost" if host == "127.0.0.1" else host
     url = f"http://{display_host}:{port}"
-    print(f"Starting AniWorld Web UI on {url}")
+    print(f"Starting H0melab Downloader on {url}")
 
     debug = os.getenv("ANIWORLD_DEBUG_MODE", "0") == "1"
     # The reloader re-executes this function in a child process, only the parent

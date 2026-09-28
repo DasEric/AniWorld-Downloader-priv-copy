@@ -16,10 +16,8 @@ from .common.search import (
 )
 
 try:
-    from .ascii import display_ascii_art
     from .config import DEFAULT_USER_AGENT, GLOBAL_SESSION, logger
 except ImportError:
-    from aniworld.ascii import display_ascii_art
     from aniworld.config import DEFAULT_USER_AGENT, GLOBAL_SESSION, logger
 
 SEARCH_URL = "https://aniworld.to/ajax/search"
@@ -1686,8 +1684,6 @@ def fetch_burningseries_series():
 def search(is_aniworld=None):
     """Prompt user for a search keyword and return a single series URL using a curses menu."""
     import curses
-
-    display_ascii_art()
 
     use_random = os.getenv("ANIWORLD_RANDOM_ANIME", "0") == "1"
 

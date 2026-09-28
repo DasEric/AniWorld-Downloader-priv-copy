@@ -205,7 +205,9 @@ def test_gap_mode_queues_every_missing_episode(monkeypatch, downloads):
     (folder / "Naruto S01E001.mkv").write_bytes(b"x")
     row = add_row(baseline=["1:1", "1:2"])
     monkeypatch.setattr(
-        autosync, "_remote_inventory", lambda url, language: (FakeSeries(), inventory(3))
+        autosync,
+        "_remote_inventory",
+        lambda url, language: (FakeSeries(), inventory(3)),
     )
 
     result = autosync._handle(row)
@@ -220,7 +222,9 @@ def test_new_only_ignores_baseline_but_queues_later_episodes(monkeypatch, downlo
     (downloads / "german-dub" / "Naruto").mkdir(parents=True)
     row = add_row(baseline=["1:1", "1:2"])
     monkeypatch.setattr(
-        autosync, "_remote_inventory", lambda url, language: (FakeSeries(), inventory(3))
+        autosync,
+        "_remote_inventory",
+        lambda url, language: (FakeSeries(), inventory(3)),
     )
 
     result = autosync._handle(row)
@@ -234,7 +238,9 @@ def test_new_only_retries_a_new_episode_until_it_exists(monkeypatch, downloads):
     (downloads / "german-dub" / "Naruto").mkdir(parents=True)
     row = add_row(baseline=["1:1"])
     monkeypatch.setattr(
-        autosync, "_remote_inventory", lambda url, language: (FakeSeries(), inventory(2))
+        autosync,
+        "_remote_inventory",
+        lambda url, language: (FakeSeries(), inventory(2)),
     )
     first = autosync._handle(row)
     db.set_queue_status(first["queue_id"], "failed")
@@ -242,9 +248,7 @@ def test_new_only_retries_a_new_episode_until_it_exists(monkeypatch, downloads):
     assert second["status"] == "queued"
 
 
-def test_new_only_fails_closed_if_the_saved_baseline_is_corrupt(
-    monkeypatch, downloads
-):
+def test_new_only_fails_closed_if_the_saved_baseline_is_corrupt(monkeypatch, downloads):
     monkeypatch.setenv("ANIWORLD_AUTOSYNC_NEW_ONLY", "1")
     monkeypatch.setenv("ANIWORLD_LANG_SEPARATION", "1")
     (downloads / "german-dub" / "Naruto").mkdir(parents=True)
@@ -256,7 +260,9 @@ def test_new_only_fails_closed_if_the_saved_baseline_is_corrupt(
         )
     row = db.get_autosync_series_item(row["id"])
     monkeypatch.setattr(
-        autosync, "_remote_inventory", lambda url, language: (FakeSeries(), inventory(2))
+        autosync,
+        "_remote_inventory",
+        lambda url, language: (FakeSeries(), inventory(2)),
     )
     with pytest.raises(RuntimeError, match="baseline is invalid"):
         autosync._handle(row)
@@ -265,7 +271,9 @@ def test_new_only_fails_closed_if_the_saved_baseline_is_corrupt(
 def test_an_active_queue_entry_prevents_a_duplicate(monkeypatch):
     row = add_row()
     monkeypatch.setattr(
-        autosync, "_remote_inventory", lambda url, language: (FakeSeries(), inventory(1))
+        autosync,
+        "_remote_inventory",
+        lambda url, language: (FakeSeries(), inventory(1)),
     )
     db.add_to_queue(
         title="Naruto",
@@ -354,7 +362,9 @@ def test_a_deleted_destination_fails_closed(monkeypatch, tmp_path):
     row = add_row(path_id=path_id)
     db.remove_custom_path(path_id)
     monkeypatch.setattr(
-        autosync, "_remote_inventory", lambda url, language: (FakeSeries(), inventory(1))
+        autosync,
+        "_remote_inventory",
+        lambda url, language: (FakeSeries(), inventory(1)),
     )
     with pytest.raises(RuntimeError, match="no longer exists"):
         autosync._handle(row)
@@ -408,9 +418,12 @@ def test_series_api_lists_adds_pauses_and_removes(client, monkeypatch):
     assert added.status_code == 201
     row_id = added.get_json()["series"]["id"]
     assert len(client.get("/api/autosync/series").get_json()["series"]) == 1
-    assert client.patch(
-        f"/api/autosync/series/{row_id}", json={"enabled": False}
-    ).get_json()["series"]["enabled"] == 0
+    assert (
+        client.patch(
+            f"/api/autosync/series/{row_id}", json={"enabled": False}
+        ).get_json()["series"]["enabled"]
+        == 0
+    )
     assert client.delete(f"/api/autosync/series/{row_id}").status_code == 200
 
 
@@ -494,9 +507,7 @@ def test_series_api_rejects_a_string_boolean(client, monkeypatch):
 def test_series_api_rejects_a_non_string_provider_update(client, monkeypatch):
     monkeypatch.setenv("ANIWORLD_ENABLE_AUTOSYNC", "1")
     row = add_row()
-    response = client.patch(
-        f"/api/autosync/series/{row['id']}", json={"provider": 123}
-    )
+    response = client.patch(f"/api/autosync/series/{row['id']}", json={"provider": 123})
     assert response.status_code == 400
 
 

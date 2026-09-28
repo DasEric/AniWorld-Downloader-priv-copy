@@ -541,4 +541,4 @@ def ensure_started():
             return
         _started = True
     _anchor()
-    threading.Thread(target=_loop, name="aniworld-autosync", daemon=True).start()
+    threading.Thread(target=_loop, name="h0melab-autosync", daemon=True).start()

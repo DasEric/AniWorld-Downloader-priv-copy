@@ -1,412 +1,176 @@
-<a id="readme-top"></a>
-# AniWorld Downloader v5
-![Aniworld Banner](https://github.com/phoenixthrush/AniWorld-Downloader/blob/models/.github/assets/aniworld-banner.png?raw=true)
+# H0melab Downloader v2
 
+[![Version](https://img.shields.io/badge/version-2.0.0-2563eb)](https://github.com/DasEric/H0melab-Downloader-V2/releases)
+[![Tests](https://github.com/DasEric/H0melab-Downloader-V2/actions/workflows/tests.yaml/badge.svg)](https://github.com/DasEric/H0melab-Downloader-V2/actions/workflows/tests.yaml)
+[![License](https://img.shields.io/github/license/DasEric/H0melab-Downloader-V2)](LICENSE)
 
-AniWorld Downloader is a cross-platform app for finding, streaming, and downloading anime, movies, series, and manga. It has a browser-based Web UI, an interactive terminal menu, and a direct CLI for scripts and headless setups.
+H0melab Downloader is a browser-based media downloader maintained by [DasEric](https://github.com/DasEric). It combines multiple supported catalogue sites, a persistent download queue, a library, Auto-Sync, Discord requests, and a TMDB-backed availability watchlist in one responsive Web UI.
 
-It runs on Windows, macOS, Linux, and Docker.
+> This project is a continuation of the original **AniWorld Downloader** by [Phoenixthrush](https://github.com/phoenixthrush/AniWorld-Downloader) and its contributors. The provider integrations and a substantial part of the downloader core originate from that project. H0melab Downloader keeps that attribution while providing a new product identity and browser-only workflow.
 
-![GitHub Release](https://img.shields.io/github/v/release/phoenixthrush/AniWorld-Downloader)
-[![PyPI Downloads](https://static.pepy.tech/badge/aniworld)](https://pepy.tech/projects/aniworld)
-![PyPI - Downloads](https://img.shields.io/pypi/dm/aniworld)
-[![Docker Image Size](https://ghcr-badge.egpl.dev/phoenixthrush/aniworld-downloader/size)](https://github.com/phoenixthrush/AniWorld-Downloader/pkgs/container/aniworld-downloader)
-![GitHub License](https://img.shields.io/github/license/phoenixthrush/AniWorld-Downloader)
-![GitHub Issues or Pull Requests](https://img.shields.io/github/issues/phoenixthrush/AniWorld-Downloader)
-[![PayPal Donate](https://img.shields.io/badge/PayPal-Donate-blue?logo=paypal)](https://www.paypal.com/paypalme/justnekochan)
-[![Discord](https://img.shields.io/badge/Discord-Join%20Server-5865F2?logo=discord&logoColor=white)](https://discord.gg/BfDvrKd8V5)
-![GitHub Repo stars](https://img.shields.io/github/stars/phoenixthrush/AniWorld-Downloader)
-![GitHub forks](https://img.shields.io/github/forks/phoenixthrush/AniWorld-Downloader)
+## Highlights
 
-### Demo
+- Responsive Web UI with desktop sidebar and mobile drawer
+- Film, series, anime, manga, and library workflows
+- Persistent queue with total and current-episode progress
+- Configurable parallel HLS transfer count
+- Auto-Sync for explicitly selected series
+- TMDB availability watchlist for upcoming **and already released** films or series
+- Strict automatic matching: direct TMDB identity or exact title and year
+- Configurable availability checks from once daily to hourly
+- Optional local login, OIDC SSO, API keys, and Discord request bot
+- Docker-first deployment with a non-root runtime user
 
-![Menu Demo](https://github.com/phoenixthrush/AniWorld-Downloader/blob/models/.github/assets/demo.png?raw=true)
+## Requirements
 
-https://github.com/user-attachments/assets/d65c4a5c-827a-45d7-a904-78977fd9aef4
+- Docker with Docker Compose (recommended), or Python 3.11 or newer
+- FFmpeg for downloading and combining media streams
+- A modern browser for the Web UI
+- Optional: a TMDB API key for the availability watchlist
 
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
+## Supported catalogues
 
-## Quick Start
-
-Python 3.11 or newer is required for the PyPI install.
-
-```bash
-pip install -U aniworld
-aniworld -w
-```
-
-That starts the Web UI at `http://localhost:8080`. Prefer the terminal menu instead? Just run:
-
-```bash
-aniworld
-```
-
-The stable release is the right choice for most people. To try the latest commit:
-
-```bash
-pip install --upgrade git+https://github.com/phoenixthrush/AniWorld-Downloader.git@models
-```
-
-Standalone builds for Windows, macOS, and Linux are attached to [GitHub Releases](https://github.com/phoenixthrush/AniWorld-Downloader/releases).
-
-Downloads need FFmpeg. Watching needs mpv, IINA, or Syncplay depending on the action you choose. Portable dependencies can be installed automatically on Windows; macOS and Linux usually use their normal system packages.
-
-Full guides and troubleshooting live in the [documentation](https://www.phoenixthrush.com/AniWorld-Downloader-Docs/).
-
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
-
-## What It Can Do
-
-- Download a full series, one season, or a few selected episodes
-- Stream through mpv, IINA, or Syncplay
-- Search several catalogues from one Web UI
-- Queue downloads and keep an eye on their progress
-- Keep selected AniWorld and SerienStream series current with Auto-Sync
-- Watch for planned releases and download them when they appear
-- Choose German Dub, English Dub, English Sub, or German Sub when available
-- Fall back to another stream hoster when the selected one fails
-- Combine video and audio streams into a clean MKV or MP4 file
-- Skip intros and outros with AniSkip
-- Organize downloads with custom paths and naming templates
-- Manage a library from the Web UI
-- Drive it from scripts through the JSON API with scoped API keys
-- Restyle the whole UI with custom CSS and a background shader
-- Protect the Web UI with local accounts or OIDC SSO
-- Accept download requests through the optional Discord bot
-- Run locally, in Docker, or as a standalone build
-
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
-
-## Supported Sites
-
-Last checked: **09/26**. Statuses reflect sampled stream/image checks, not full downloads or playback.
-
-| Site | Content | Status | Notes |
-| --- | --- | --- | --- |
-| AniWorld | Anime and anime movies | Working | Main focus |
-| SerienStream | Series | Working: captcha required | Main focus |
-| MegaKino | Movies and series | Working | |
-| FilmPalast | Movies | Broken: sampled VOE links failed | |
-| Filmo | Movies | Working | |
-| Cineby | Movies and series | Unverified: stream API unavailable | Disabled by default following shutdown |
-| MangaFire | Manga | Working | JPG and CBZ downloads |
-| Hanime | Adult animation | Working | Disabled by default |
-| Kinox | Movies and series | Unverified: manual captcha required | Disabled by default |
-| BurningSeries | Series | Broken: embed resolution failed | Disabled by default |
-| Moflix | Movies and series | Working: sampled mirrors | Gupload, MoflixClick, and Vidara where offered |
-
-### Stream Providers
-
-| Provider | Status | Last Checked |
+| Catalogue | Content | Default |
 | --- | --- | --- |
-| VOE | Working | 09/26 |
-| Filemoon | Working | 09/26 |
-| Vidmoly | Broken: no embed HTML returned | 09/26 |
-| Vidoza | Unverified: test link returned 404 | 09/26 |
-| Doodstream | Working | 09/26 |
-| MegaKino | Working | 09/26 |
-| Gupload | Working: sampled Moflix movie and episode | 09/26 |
-| MoflixClick | Working: sampled movie and episode; some individual links fail | 09/26 |
-| Vidara | Working: sampled Moflix episode | 09/26 |
+| AniWorld | Anime and anime films | Enabled |
+| SerienStream | Series | Enabled |
+| MegaKino | Films and series | Enabled |
+| FilmPalast / Filmo | Films | Enabled |
+| MangaFire | Manga | Enabled |
+| Moflix | Films and series | Enabled |
+| Cineby | Films and series | Disabled |
+| Kinox | Films and series | Disabled |
+| BurningSeries | Series | Disabled |
+| Hanime | Adult animation | Disabled |
 
-VOE previews are broken. Filemoon, Doodstream, and MegaKino previews are not implemented. Streamtape, Luluvdo, and LoadX are not implemented.
+Every catalogue can be enabled or disabled under **Settings**. Availability, captcha requirements and individual stream providers can change independently of this project.
 
-Availability varies by site, episode, and region. Failed providers can fall back to others in your configured order. Live checks are available in `tests/test_providers_*.py` and run separately from pytest.
-
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
-
-## Using the CLI
-
-Pass a URL directly to download it:
+## Docker Compose
 
 ```bash
-aniworld "https://aniworld.to/anime/stream/example/staffel-1/episode-1"
-```
-
-Choose a language and provider without opening the menu:
-
-```bash
-aniworld --no-menu --language "German Dub" --provider VOE \
-  "https://aniworld.to/anime/stream/example/staffel-1/episode-1"
-```
-
-Useful starting points:
-
-```bash
-aniworld --help
-aniworld --examples
-aniworld --version
-```
-
-Configuration is stored in `~/.aniworld/.env` by default. Set `ANIWORLD_INSTALL_FOLDER` to relocate the app data, including its configuration and database. The complete list of settings and their defaults is in [`src/aniworld/.env.example`](src/aniworld/.env.example).
-
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
-
-## Docker
-
-The included Compose file runs the Web UI on port `8080`, keeps app data in a named volume, and saves downloads in `./Downloads`.
-
-```bash
+git clone https://github.com/DasEric/H0melab-Downloader-V2.git
+cd H0melab-Downloader-V2
 mkdir -p Downloads
 docker compose up -d
 ```
 
-Open `http://localhost:8080` when the container is ready.
+Open `http://localhost:8080`.
+
+The included Compose file deliberately keeps the old `aniworld-data` Docker volume name. Existing installations therefore retain their users, API keys, queue, watchlist, themes, secrets, and settings when they pull v2 and recreate the container.
+
+Useful operating commands:
 
 ```bash
 docker compose logs -f
+docker compose pull
+docker compose up -d
 docker compose down
 ```
 
-To build the image locally instead of using the published image, change `docker-compose.yaml` to use `build: .`, then run:
+To build the image from the checked-out source, replace `image:` in `docker-compose.yaml` with `build: .` and run `docker compose up -d --build`.
 
-```bash
-docker compose up -d --build
+## Upgrade from v5
+
+The first v2 start performs a non-destructive migration:
+
+1. `~/.aniworld` is copied to `~/.h0melab-downloader` when the new directory does not exist.
+2. The SQLite database is copied with SQLite's backup API to `h0melab.db`; the original `aniworld.db` remains as a rollback copy.
+3. Existing movie watchlist rows are copied into the new film-and-series schema with their IDs and queue links intact.
+4. Existing `ANIWORLD_*` values are mapped to `H0MELAB_*`; v2 names win when both are present.
+5. Unknown/custom `.env` entries are preserved.
+6. `.web-settings.env`, authentication secrets, themes, browser profile, downloads, custom paths, Auto-Sync state, and Discord settings remain in the persistent data directory.
+
+Back up the persistent volume before any production upgrade. Do not delete the old data directory or volume until the migrated instance has been verified.
+
+## Configuration
+
+Settings can be changed in the browser. A fully documented template is available at [`src/aniworld/.env.example`](src/aniworld/.env.example).
+
+Frequently used variables:
+
+```dotenv
+H0MELAB_DOWNLOAD_PATH=Downloads
+H0MELAB_UI_LANGUAGE=de
+H0MELAB_HLS_CONCURRENCY=8
+H0MELAB_TMDB_API_KEY=
+H0MELAB_UPCOMING_CHECKS_PER_DAY=1
+H0MELAB_WEB_AUTH=0
 ```
 
-The comments in [`docker-compose.yaml`](docker-compose.yaml) cover authentication, OIDC, the Discord bot, Auto-Sync, the captcha solver, language, provider, naming, and the other common settings. The complete list, including the options that rarely need touching, is in [`src/aniworld/.env.example`](src/aniworld/.env.example).
+`H0MELAB_HLS_CONCURRENCY` is read when the next episode begins. Changing it never modifies an episode that is already running.
 
-Settings changed in the Web UI apply immediately and are saved in the persistent config volume, so they remain after a restart or `docker compose down`. Values explicitly saved in the panel take priority over environment and image defaults on the next start. You can still provide initial deployment values through a Compose `environment:` block or a host-side `.env`:
+## Availability watchlist
 
-```yaml
-env_file:
-  - ./.env
-```
-
-The named volume holds the database (users, API keys, custom paths, Auto-Sync series), panel settings, your `.env`, and the `custom.css` a theme is saved to, so keep it if you care about any of those.
-
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
-
-## API
-
-Everything the Web UI does is available as JSON. Create a key in **Settings → API Keys**, then send it as `X-API-Key`:
-
-```bash
-curl -H "X-API-Key: awd_yourkey" http://localhost:8080/api/queue
-```
-
-Keys come in three scopes: **read** (search and browse), **read and download** (also queue and cancel), and **full access** (also settings and library deletion). A key can never create or manage other keys.
-
-`GET /api/queue` without parameters returns the whole queue, as it always has. Add any of `limit`, `offset`, `status`, `q` or `sort` and you get one page instead, along with `total` and per-status `counts`; paged rows leave out the `episodes` list, which is the largest field and the one the UI never shows.
-
-```bash
-curl -H "X-API-Key: awd_yourkey" "http://localhost:8080/api/queue?status=failed&limit=25&sort=newest"
-```
-
-The full endpoint list, with examples, is on the settings page itself under *Endpoints and examples*, so it always matches the version you are running.
-
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
+1. Add a TMDB API key under **Settings → Integrations**.
+2. Choose how many checks should run per day (1–24).
+3. Open **Demnächst**, search for a film or series, and add it.
+4. The scheduler searches every enabled compatible site after the release date, or immediately for already released and unknown-date titles.
+5. Only an exact title/year match or direct TMDB match is queued. Ambiguous matches stay on the list.
 
 ## Theming
 
-The Web UI can be restyled from **Settings → Appearance**. The stylesheet is global, so it applies to everyone using the instance, and it survives restarts. It is stored as `custom.css` next to your `.env`, which means you can also edit it by hand or mount it into a container.
+Administrators can import or edit a theme under **Settings → Appearance**. The shipped [`themes/template.css`](themes/template.css) documents every supported token and surface; [`themes/light.css`](themes/light.css) is a complete example. Store remote styles on a host that serves CSS with the correct content type.
 
-Paste CSS straight in, or pull in a published theme with one line:
+## Optional integrations
 
-```css
-@import url('https://cdn.jsdelivr.net/gh/you/your-theme@main/theme.css');
-```
+OIDC SSO, the Discord request bot, API keys, custom output paths, and custom themes are optional. Enable only the integrations used by your deployment and keep all associated secrets in the persistent settings volume.
 
-The import may sit anywhere in the box; it gets moved to the top on save, because CSS only honours `@import` before any other rule.
+## API
 
-> **The URL has to be served as `text/css`.** Browsers refuse to apply a stylesheet sent as `text/plain`, and they do it silently, with nothing in the console. That rules out **pastebin.com**, **raw.githubusercontent.com** and **gist.githubusercontent.com**, which all send `text/plain` with `nosniff`.
->
-> For a file in a GitHub repo, jsDelivr serves the same content with the right type. Swap the host and put `@` before the branch:
->
-> ```
-> https://raw.githubusercontent.com/user/repo/main/theme.css   ✗ ignored
-> https://cdn.jsdelivr.net/gh/user/repo@main/theme.css         ✓ works
-> ```
->
-> The settings page warns you if you paste one of the known-bad hosts, and offers the jsDelivr rewrite.
-
-### Writing a theme
-
-Almost the entire interface is built from CSS variables, so a theme is usually just a list of values rather than a fight with class names. That also means it keeps working when the markup changes.
-
-```css
-:root {
-  --bg: #f5f6f8;
-  --surface: #ffffff;
-  --text: #3f4652;
-  --accent: #e11d48;
-}
-```
-
-Two files in [`themes/`](themes) are the starting point:
-
-| File | What it is |
-| --- | --- |
-| [`themes/template.css`](themes/template.css) | Every variable, its default, and a note on what it affects. Copy it and edit. |
-| [`themes/light.css`](themes/light.css) | A complete light theme, built only from those variables. Fork it or use it as is. |
-
-The variables are a shortcut, not a limit. Custom CSS is ordinary CSS, so animated backdrops, pseudo-element layers and backdrop filters all work. The notes at the bottom of `template.css` cover the four things about this app's markup you need to know before layering effects onto it.
-
-### Surfaces and state
-
-Two empty layers sit behind the page for themes to paint on, so you never have to take over a pseudo-element the app might want back:
-
-```css
-.theme-layer[data-layer="1"] { background: radial-gradient(...); }  /* furthest back */
-.theme-layer[data-layer="2"] { background: url("data:image/svg+xml,...."); }
-```
-
-And `<body>` carries the app's state, which is sturdier than matching internal class names:
-
-| Attribute | Values |
-| --- | --- |
-| `data-page` | `index`, `library`, `autosync`, `settings` |
-| `data-site` | `aniworld`, `sto`, `megakino`, … |
-| `data-queue` | `active`, `idle` (plus `data-queue-count`) |
-| `data-modal` | `open`, `closed` |
-
-```css
-body[data-queue="active"] .theme-layer[data-layer="2"] { opacity: 0.6; }
-```
-
-### Background shader
-
-Settings → Appearance also accepts a **GLSL fragment shader**, painted on a canvas behind everything:
-
-```glsl
-void main() {
-  vec2 uv = gl_FragCoord.xy / u_resolution;
-  fragColor = vec4(uv, 0.5 + 0.5 * sin(u_time), 1.0);
-}
-```
-
-You get `u_resolution`, `u_time` and `fragColor`. It is compiled in your browser before saving, so a mistake comes back as a GLSL error with a line number rather than a black screen.
-
-> **Only GLSL is accepted, never JavaScript.** A fragment shader runs on the GPU with no access to the DOM, cookies, the network or the filesystem, so the worst a hostile one can do is look wrong. That is deliberate: themes are global and can be imported from a remote host, so allowing scripts would turn a theme URL into code execution in every user's session.
-
-It is capped at half a megapixel, paused when the tab is hidden, frozen under `prefers-reduced-motion`, dropped if it fails to compile, and skipped entirely by `?nocss=1`.
-
-### Good to know
-
-- **The sign-in screen is never themed.** Custom CSS is not loaded on the login or first-run setup pages, so a theme cannot restyle the form people type their password into.
-- **Locked yourself out?** If a theme hides the settings page, open `/settings?nocss=1` to load it without custom CSS and clear the box.
-- **Imports are fetched by the browser.** Each visitor's browser loads the URL itself, so the host it sits on sees their IP and can change the theme whenever it likes. Only import URLs you trust.
-- Changing the theme needs an admin account when authentication is on.
-
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
-
-## Optional Features
-
-The normal install already includes the terminal and Web UI dependencies. SSO and the Discord bot are optional:
+The Web UI uses the JSON API exposed by the same service. Administrators can create scoped API keys under **Settings → API keys**. Send a key using the `X-API-Key` header:
 
 ```bash
-pip install "aniworld[sso]"
-pip install "aniworld[discord]"
-
-# Everything optional
-pip install "aniworld[all]"
+curl -H "X-API-Key: h0d_yourkey" http://localhost:8080/api/queue
 ```
 
-For local development:
+Available scopes are read-only, download access and administrator access. API keys never expose stored TMDB, Discord or OIDC secrets. The current endpoint list and examples are shown directly on the settings page so they match the installed version.
+
+## Updating
 
 ```bash
-git clone https://github.com/phoenixthrush/AniWorld-Downloader.git
-cd AniWorld-Downloader
-pip install -e ".[all]"
+git pull --rebase
+docker compose pull
+docker compose up -d
 ```
 
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
+For a source installation, activate the virtual environment and run `pip install -e ".[all,test]"` again after updating. Keep a backup of the persistent configuration directory or Docker volume before a major-version upgrade.
 
-## Contributing
+## Troubleshooting
 
-Bug reports, fixes, provider updates, documentation improvements, and new ideas are welcome. Before opening an issue, have a quick look through the existing ones so useful context stays in one place.
+- Check `docker compose logs -f` or the terminal output first.
+- Verify that the download directory is writable by the container or service account.
+- Confirm that FFmpeg is installed when running without Docker.
+- If a custom theme hides controls, open `/settings?nocss=1` and remove the theme.
+- If a catalogue requires a captcha, configure its browser/captcha options under **Settings**.
+- A title on the availability watchlist is queued only after the configured language and a usable provider are available.
 
-When reporting a bug, please include:
-
-- Your operating system
-- How you installed AniWorld Downloader
-- The app and Python versions
-- The command you ran
-- The relevant log output
-
-Pull requests should stay focused and explain the behavior they change. There is no need to dress it up. A clear description and a reproducible test are worth much more.
-
-There is a test suite, run on every push. It covers everything except the stream providers, which are left out on purpose because they depend on live third-party sites:
+## Local development
 
 ```bash
-pip install -e ".[test]"
-pytest
+python -m venv .venv
+.venv\Scripts\activate
+pip install -e ".[all,test]"
+h0melab-downloader
 ```
 
-### Contributors
+Run the test suite with:
 
-<a href="https://github.com/phoenixthrush/AniWorld-Downloader/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=phoenixthrush/AniWorld-Downloader" alt="Contributors" />
-</a>
+```bash
+python -m pytest -q
+```
 
-- **Lulu** (since Sep 14, 2024)  
-  [![wakatime](https://wakatime.com/badge/user/ebc8f6ad-7a1c-4f3a-ad43-cc402feab5fc/project/f39b2952-8865-4176-8ccc-4716e73d0df3.svg)](https://wakatime.com/badge/user/ebc8f6ad-7a1c-4f3a-ad43-cc402feab5fc/project/f39b2952-8865-4176-8ccc-4716e73d0df3)
+## Security
 
-- **Tmaster055** (since Oct 21, 2024)  
-  [![Wakatime Badge](https://wakatime.com/badge/user/79a1926c-65a1-4f1c-baf3-368712ebbf97/project/5f191c34-1ee2-4850-95c3-8d85d516c449.svg)](https://wakatime.com/badge/user/79a1926c-65a1-4f1c-baf3-368712ebbf97/project/5f191c34-1ee2-4850-95c3-8d85d516c449.svg)
+- Run the service only on a trusted network or enable authentication.
+- Put public deployments behind HTTPS and set `H0MELAB_WEB_BASE_URL`.
+- TMDB, Discord, and OIDC secrets are masked by the API and excluded from settings exports.
+- JSON write endpoints reject non-JSON bodies; authenticated deployments use secure session settings and CSRF protection for browser forms.
+- The Docker image runs as an unprivileged user.
 
-- **Sirox** (since May 13, 2025)
+## Credits and license
 
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
+H0melab Downloader is developed and maintained by [DasEric](https://github.com/DasEric) in the repository [DasEric/H0melab-Downloader-V2](https://github.com/DasEric/H0melab-Downloader-V2).
 
-## Credits
+Original project and creator credit: [Phoenixthrush/AniWorld-Downloader](https://github.com/phoenixthrush/AniWorld-Downloader), Phoenixthrush, Sirox, and all upstream contributors. Provider names and URLs remain their real external service names and are not part of the H0melab product branding.
 
-AniWorld Downloader leans on some excellent open-source projects:
-
-- [mpv](https://github.com/mpv-player/mpv) for playback
-- [IINA](https://github.com/iina/iina) for a native macOS player built on mpv
-- [Syncplay](https://github.com/Syncplay/syncplay) for synchronized watch sessions
-- [Anime4K](https://github.com/bloc97/Anime4K) for real-time upscaling
-- [AniSkip](https://api.aniskip.com/api-docs) for opening and ending timestamps
-- [flag-icons](https://github.com/lipis/flag-icons) for the language flags
-- [new-domain-check](https://github.com/Yezun-hikari/new-domain-check) for tracking MegaKino domain changes
-- [fake-useragent](https://github.com/fake-useragent/fake-useragent) for realistic user-agent data
-
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
-
-## Other Cool Projects
-
-- [Jellyfin-AniWorld-Downloader](https://github.com/SiroxCW/Jellyfin-AniWorld-Downloader) by [SiroxCW](https://github.com/SiroxCW), a Jellyfin plugin for browsing and downloading AniWorld content inside your media server
-- [AniSeerr](https://github.com/Yezun-hikari/AniSeerr) by [Yezun-hikari](https://github.com/Yezun-hikari), a bridge connecting Seerr with AniWorld-Downloader for requests
-- [AniBridge](https://github.com/Zzackllack/AniBridge) by [Zzackllack](https://github.com/Zzackllack), a small FastAPI bridge between supported catalogues and automation tools
-- [AniLoader](https://github.com/WimWamWom/AniLoader) by [WimWamWom](https://github.com/WimWamWom), a standalone web-based fork of AniWorld-Downloader
-
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
-
-## Support
-
-For bugs, setup trouble, or feature requests, [open a GitHub issue](https://github.com/phoenixthrush/AniWorld-Downloader/issues). It keeps the answer searchable for the next person who runs into the same thing.
-
-You can also join the [Discord server](https://discord.gg/BfDvrKd8V5) or email [contact@phoenixthrush.com](mailto:contact@phoenixthrush.com).
-
-If the project has been useful, leaving a star is a simple way to help people find it.
-
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
-
-## Legal Disclaimer
-
-AniWorld Downloader is a client-side tool. It does not host, upload, store, or distribute media on behalf of third-party sites.
-
-You are responsible for how you use it and for following the laws and terms that apply where you live. The project is provided "as is". Its maintainers are not responsible for third-party content, external links, or the availability, accuracy, legality, or reliability of outside services.
-
-Questions about content hosted by another service should be directed to that service.
-
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
-
-## Star History
-
-<a href="https://www.star-history.com/?type=date&repos=phoenixthrush%2FAniWorld-Downloader">
- <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=phoenixthrush/AniWorld-Downloader&type=date&theme=dark&legend=top-left&sealed_token=2w3mvLwCvYdC3Bq9vEfw-I3us7ocvtgOppVR5_etK2ZoymoZesVxuElMPDB0v_x46GEhBSkjWsN6bgleOwD5k0xC-LI-o4eh1Cq4iJAIRP-GBwweIiP7UqcOt7Vn9BjC_-Wv0iuJbxmfs8Xn2QAiwgq0TuOu5LLJkkbTleDugs-IwWF7ZYz5hvUPkc6-" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=phoenixthrush/AniWorld-Downloader&type=date&legend=top-left&sealed_token=2w3mvLwCvYdC3Bq9vEfw-I3us7ocvtgOppVR5_etK2ZoymoZesVxuElMPDB0v_x46GEhBSkjWsN6bgleOwD5k0xC-LI-o4eh1Cq4iJAIRP-GBwweIiP7UqcOt7Vn9BjC_-Wv0iuJbxmfs8Xn2QAiwgq0TuOu5LLJkkbTleDugs-IwWF7ZYz5hvUPkc6-" />
-   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=phoenixthrush/AniWorld-Downloader&type=date&legend=top-left&sealed_token=2w3mvLwCvYdC3Bq9vEfw-I3us7ocvtgOppVR5_etK2ZoymoZesVxuElMPDB0v_x46GEhBSkjWsN6bgleOwD5k0xC-LI-o4eh1Cq4iJAIRP-GBwweIiP7UqcOt7Vn9BjC_-Wv0iuJbxmfs8Xn2QAiwgq0TuOu5LLJkkbTleDugs-IwWF7ZYz5hvUPkc6-" />
- </picture>
-</a>
-
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
-
-## License
-
-AniWorld Downloader is available under the [MIT License](LICENSE).
-
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
+Licensed under the [MIT License](LICENSE).

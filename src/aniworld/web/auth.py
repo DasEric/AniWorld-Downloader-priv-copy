@@ -20,7 +20,7 @@ from flask import (
     url_for,
 )
 
-from ..config import ANIWORLD_CONFIG_DIR
+from ..config import H0MELAB_CONFIG_DIR
 from ..logger import get_logger
 from . import apikeys, db
 
@@ -43,7 +43,7 @@ except ImportError:  # authlib is an optional extra
 
 oauth = OAuth()
 
-_SECRET_KEY_PATH = ANIWORLD_CONFIG_DIR / ".flask_secret"
+_SECRET_KEY_PATH = H0MELAB_CONFIG_DIR / ".flask_secret"
 
 USERNAME_RE = re.compile(r"^[a-zA-Z0-9._-]+$")
 MIN_PASSWORD_LENGTH = 8
@@ -58,7 +58,7 @@ auth_bp = Blueprint("auth", __name__)
 # Configuration
 # ---------------------------------------------------------------------------
 def get_or_create_secret_key():
-    ANIWORLD_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    H0MELAB_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
     if _SECRET_KEY_PATH.exists():
         return _SECRET_KEY_PATH.read_bytes()
     key = secrets.token_bytes(32)

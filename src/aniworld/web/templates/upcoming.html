@@ -1,22 +1,22 @@
 {% extends "base.html" %}
 
-{% block title %}Upcoming - AniWorld Downloader{% endblock %}
+{% block title %}Demnächst - H0melab Downloader{% endblock %}
 
 {% block content %}
 <div class="container container-narrow">
   <div class="page-head">
-    <h1 data-i18n="upcoming.title">Upcoming movies</h1>
+    <h1 data-i18n="upcoming.title">Availability watchlist</h1>
     <button class="btn btn-primary" id="checkUpcomingBtn" data-i18n="upcoming.check" disabled>Check now</button>
   </div>
 
   <section class="card">
     <h2 data-i18n="upcoming.how_title">How it works</h2>
     <p class="hint" data-i18n="upcoming.subtitle">
-      Track unreleased movies. Once a day, enabled movie sites are checked and a download is queued only after an exact
-      title and release-year match, or a direct TMDB match, has a usable provider.
+      Track movies and series before or after release. Enabled sites are checked on your schedule and downloads are only
+      queued after an exact title/year match or direct TMDB match.
     </p>
     <div class="notice" id="upcomingModeNotice" data-i18n="upcoming.mode_notice">
-      Only exact matches are downloaded. Ambiguous or unavailable movies remain on the watchlist.
+      Only exact matches are downloaded. Ambiguous or unavailable titles remain on the watchlist.
     </div>
     <div class="notice upcoming-config-notice" id="tmdbMissing" hidden>
       <div>
@@ -29,15 +29,23 @@
   </section>
 
   <section class="card">
-    <h2 data-i18n="upcoming.add">Add movie</h2>
+    <h2 data-i18n="upcoming.add">Add movie or series</h2>
     <p class="hint" data-i18n="upcoming.add_hint">
-      Search TMDB by title or browse upcoming theatrical releases in Germany.
+      Search TMDB for released or upcoming movies and series.
     </p>
     <div class="control-row upcoming-search-row">
       <label class="field">
-        <span class="field-label" data-i18n="upcoming.movie_title">Movie title</span>
+        <span class="field-label" data-i18n="upcoming.movie_title">Movie or series title</span>
         <input id="upcomingSearch" type="search" autocomplete="off" disabled
           data-i18n-placeholder="upcoming.movie_title" placeholder="Movie title" />
+      </label>
+      <label class="field upcoming-type-field">
+        <span class="field-label" data-i18n="upcoming.type">Type</span>
+        <select id="upcomingType" disabled>
+          <option value="multi" data-i18n="upcoming.type_all">Movies & series</option>
+          <option value="movie" data-i18n="upcoming.type_movie">Movie</option>
+          <option value="tv" data-i18n="upcoming.type_tv">Series</option>
+        </select>
       </label>
       <button class="btn btn-primary" id="searchUpcomingBtn" data-i18n="index.search" disabled>Search</button>
       <button class="btn btn-secondary" id="browseUpcomingBtn" data-i18n="upcoming.browse" disabled>TMDB upcoming</button>
@@ -51,6 +59,7 @@
       <thead>
         <tr>
           <th data-i18n="upcoming.movie">Movie</th>
+          <th data-i18n="upcoming.type">Type</th>
           <th data-i18n="upcoming.release">Release</th>
           <th data-i18n="upcoming.status">Status</th>
           <th></th>
@@ -64,7 +73,7 @@
     <h2 data-i18n="upcoming.status">Status</h2>
     <div class="sync-stats">
       <div><div class="ip-label">TMDB</div><div class="sync-value" id="upcomingTmdbState">-</div></div>
-      <div><div class="ip-label" data-i18n="upcoming.watched">Watched movies</div><div class="sync-value" id="upcomingCount">0</div></div>
+      <div><div class="ip-label" data-i18n="upcoming.watched">Watched titles</div><div class="sync-value" id="upcomingCount">0</div></div>
       <div><div class="ip-label" data-i18n="autosync.last_run">Last run</div><div class="sync-value" id="upcomingLastRun">-</div></div>
       <div><div class="ip-label" data-i18n="autosync.next_run">Next run</div><div class="sync-value" id="upcomingNextRun">-</div></div>
     </div>

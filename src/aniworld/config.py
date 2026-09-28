@@ -5,12 +5,9 @@ import re
 from enum import Enum
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
-from urllib.error import URLError
-from urllib.request import Request, urlopen
 
 import certifi
 from niquests import Session
-from packaging.version import parse as parse_version
 
 from .env import initialize_app_env
 from .logger import get_logger
@@ -18,9 +15,9 @@ from .logger import get_logger
 VERSION = None
 
 try:
-    VERSION = version("aniworld")
+    VERSION = version("h0melab-downloader")
 except PackageNotFoundError:
-    VERSION = None
+    VERSION = "2.0.0"
 
 CA_CERT_BUNDLE = certifi.where()
 os.environ.setdefault("SSL_CERT_FILE", CA_CERT_BUNDLE)
@@ -28,40 +25,10 @@ os.environ.setdefault("REQUESTS_CA_BUNDLE", CA_CERT_BUNDLE)
 os.environ.setdefault("CURL_CA_BUNDLE", CA_CERT_BUNDLE)
 
 
-def get_latest_version():
-    """Fetch the newest available version from PyPI."""
-    try:
-        logger.debug("Checking latest version on PyPI...")
-        request = Request(
-            "https://pypi.org/pypi/aniworld/json",
-            headers={"User-Agent": DEFAULT_USER_AGENT},
-        )
-        with urlopen(request, timeout=5) as response:
-            payload = json.load(response)
-        latest_version = payload["info"]["version"]
-        logger.debug(f"Latest PyPI version is {latest_version}")
-        return latest_version
-    except (URLError, TimeoutError, OSError, ValueError, KeyError) as exc:
-        logger.debug(f"Could not fetch latest version from PyPI: {exc}")
-        return None
-
-
-def is_newest_version() -> bool:
-    """Checks if the installed version is the newest available on PyPI."""
-    if not VERSION:
-        return False
-
-    latest_version = get_latest_version()
-    if not latest_version:
-        return False
-
-    return parse_version(VERSION) >= parse_version(latest_version)
-
-
 # Resolve the app directory and load its .env file whenever config is imported.
-ANIWORLD_CONFIG_DIR = initialize_app_env(
+H0MELAB_CONFIG_DIR = initialize_app_env(
     Path(__file__).resolve().parent / ".env.example",
-    Path.home() / ".aniworld",
+    Path.home() / ".h0melab-downloader",
 )
 
 logger = get_logger(__name__)

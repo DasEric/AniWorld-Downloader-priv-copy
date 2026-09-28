@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Settings - AniWorld Downloader{% endblock %}
+{% block title %}Settings - H0melab Downloader{% endblock %}
 
 {% block content %}
 <div class="container container-settings">
@@ -665,12 +665,12 @@
             </div>
 
             <h3 data-i18n="settings.api_example_queue">Read the queue</h3>
-            <pre class="api-example"><code>curl -H "X-API-Key: awd_yourkey" \
+            <pre class="api-example"><code>curl -H "X-API-Key: h0d_yourkey" \
     http://localhost:8080/api/queue</code></pre>
 
             <h3 data-i18n="settings.api_example_download">Start a download</h3>
             <pre class="api-example"><code>curl -X POST http://localhost:8080/api/download \
-    -H "X-API-Key: awd_yourkey" \
+    -H "X-API-Key: h0d_yourkey" \
     -H "Content-Type: application/json" \
     -d '{
           "title": "Naruto",
@@ -697,6 +697,14 @@
           <div class="inline-form">
             <input type="password" id="tmdbApiKey" autocomplete="new-password" placeholder="TMDB API key or read token" />
             <button type="button" class="btn btn-primary" id="saveTmdbBtn" data-i18n="common.save">Save</button>
+          </div>
+          <div class="control-row settings-subsection">
+            <label class="field">
+              <span class="field-label" data-i18n="settings.upcoming_checks">Availability checks per day</span>
+              <input type="number" id="upcomingChecksPerDay" min="1" max="24" step="1" inputmode="numeric" />
+              <span class="hint" data-i18n="settings.upcoming_checks_hint">Applies to the next scheduled check. 1 means every 24 hours, 24 means hourly.</span>
+            </label>
+            <button type="button" class="btn btn-primary" id="saveUpcomingChecksBtn" data-i18n="common.save">Save</button>
           </div>
         </section>
         <section class="card">

@@ -4,7 +4,7 @@ Ported/merged from MediaForge (https://github.com/PD-Codes/MediaForge) by
 PD-Codes — the hardened detection/solving logic below (ad-overlay defence,
 network ad-blocking, fingerprint hardening, multi-widget challenge solver)
 originates there and was adapted to this project (env vars renamed
-MEDIAFORGE_* -> ANIWORLD_*, DNS-routing dropped, AniWorld-Downloader-only
+Legacy variable migration, DNS-routing dropped, H0melab Downloader integration
 helpers such as the hanime/cineby stream sniffers kept as-is).
 
 Streaming sites fronted by Cloudflare (serienstream.to, aniworld.to,
@@ -359,7 +359,7 @@ _PROFILE_LOCK = _threading.Lock()
 
 def _resolve_profile_dir() -> str:
     """Directory for the persistent Chromium profile.  Defaults to
-    ~/.aniworld/browser-profile (a mounted volume in the Docker setup, so the
+    ~/.h0melab-downloader/browser-profile (a mounted volume in Docker, so the
     fingerprint and cf_clearance survive container restarts)."""
     global _PROFILE_DIR_CACHE
     if _PROFILE_DIR_CACHE:
@@ -370,12 +370,12 @@ def _resolve_profile_dir() -> str:
     candidate = os.environ.get("ANIWORLD_BROWSER_PROFILE")
     if not candidate:
         try:
-            from ..config import ANIWORLD_CONFIG_DIR
+            from ..config import H0MELAB_CONFIG_DIR
 
-            candidate = str(ANIWORLD_CONFIG_DIR / "browser-profile")
+            candidate = str(H0MELAB_CONFIG_DIR / "browser-profile")
         except Exception:
             candidate = os.path.join(
-                os.path.expanduser("~"), ".aniworld", "browser-profile"
+                os.path.expanduser("~"), ".h0melab-downloader", "browser-profile"
             )
     try:
         os.makedirs(candidate, exist_ok=True)

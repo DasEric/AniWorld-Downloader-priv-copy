@@ -135,9 +135,30 @@ document.addEventListener("keydown", (event) => {
 document.addEventListener("DOMContentLoaded", () => {
   const toggle = document.getElementById("navToggle");
   const nav = document.getElementById("mainNav");
+  const backdrop = document.getElementById("navBackdrop");
   if (!toggle || !nav) return;
-  toggle.addEventListener("click", () => {
-    const open = nav.classList.toggle("open");
+
+  function setOpen(open) {
+    nav.classList.toggle("open", open);
+    if (backdrop) {
+      backdrop.classList.toggle("open", open);
+      backdrop.hidden = !open;
+    }
+    document.body.classList.toggle("nav-open", open);
     toggle.setAttribute("aria-expanded", String(open));
+  }
+
+  toggle.addEventListener("click", () => setOpen(!nav.classList.contains("open")));
+  if (backdrop) backdrop.addEventListener("click", () => setOpen(false));
+  nav.addEventListener("click", (event) => {
+    if (event.target.closest("a") && window.matchMedia("(max-width: 820px)").matches) {
+      setOpen(false);
+    }
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && nav.classList.contains("open")) {
+      setOpen(false);
+      toggle.focus();
+    }
   });
 });

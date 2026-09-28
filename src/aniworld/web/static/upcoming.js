@@ -6,6 +6,7 @@
   const searchBtn = el("searchUpcomingBtn");
   const browseBtn = el("browseUpcomingBtn");
   const searchInput = el("upcomingSearch");
+  const typeSelect = el("upcomingType");
   const resultsBox = el("upcomingResults");
   const listBody = el("upcomingList");
 
@@ -50,7 +51,8 @@
       <div class="info">
         <div class="title" title="${esc(movie.title)}">${esc(movie.title)}</div>
         <div class="subtitle">${esc(movie.release_date || t("upcoming.release_unknown", "Release unknown"))}</div>
-        <button class="btn btn-primary upcoming-add-btn" data-add="${Number(movie.tmdb_id)}">${t("common.add", "Add")}</button>
+        <span class="media-type-chip">${movie.media_type === "tv" ? t("upcoming.type_tv", "Series") : t("upcoming.type_movie", "Movie")}</span>
+        <button class="btn btn-primary upcoming-add-btn" data-add="${Number(movie.tmdb_id)}" data-media-type="${movie.media_type === "tv" ? "tv" : "movie"}">${t("common.add", "Add")}</button>
       </div>
     </article>`;
   }
@@ -64,7 +66,7 @@
 
   function renderWatchlist(items) {
     if (!items.length) {
-      listBody.innerHTML = `<tr class="empty-row"><td colspan="4">${t("upcoming.empty", "No movies are being watched.")}</td></tr>`;
+      listBody.innerHTML = `<tr class="empty-row"><td colspan="5">${t("upcoming.empty", "No titles are being watched.")}</td></tr>`;
       return;
     }
 
@@ -78,6 +80,7 @@
         : "";
       return `<tr>
         <td><strong>${esc(movie.title)}</strong>${message}</td>
+        <td><span class="media-type-chip">${movie.media_type === "tv" ? t("upcoming.type_tv", "Series") : t("upcoming.type_movie", "Movie")}</span></td>
         <td>${esc(movie.release_date || "-")}</td>
         <td><span class="status-pill ${STATUS_CLASS[movie.status] || "status-queued"}">${esc(statusLabel(movie.status))}</span></td>
         <td class="upcoming-actions">${toggle}<button class="btn btn-danger" data-delete="${movie.id}">${t("common.remove", "Remove")}</button></td>
@@ -95,7 +98,7 @@
     el("upcomingCount").textContent = String((data.items || []).length);
     el("upcomingLastRun").textContent = formatTime(data.last_run);
     el("upcomingNextRun").textContent = formatTime(data.next_run);
-    [checkBtn, searchBtn, browseBtn, searchInput].forEach((node) => {
+    [checkBtn, searchBtn, browseBtn, searchInput, typeSelect].forEach((node) => {
       node.disabled = !configured;
     });
     renderWatchlist(data.items || []);
@@ -123,7 +126,7 @@
       searchInput.focus();
       return;
     }
-    loadResults(`/api/upcoming/tmdb/search?q=${encodeURIComponent(query)}`, searchBtn);
+    loadResults(`/api/upcoming/tmdb/search?q=${encodeURIComponent(query)}&type=${encodeURIComponent(typeSelect.value)}`, searchBtn);
   }
 
   searchBtn.addEventListener("click", search);
@@ -137,7 +140,10 @@
     if (!button) return;
     button.disabled = true;
     try {
-      await apiSend("/api/upcoming", "POST", { tmdb_id: Number(button.dataset.add) });
+      await apiSend("/api/upcoming", "POST", {
+        tmdb_id: Number(button.dataset.add),
+        media_type: button.dataset.mediaType
+      });
       showToast(t("upcoming.added", "Added"));
       await load();
       button.textContent = t("upcoming.added", "Added");

@@ -719,3 +719,12 @@ def test_the_settings_carry_a_preview_for_the_page():
     preview = settings_store.read_settings()["path_preview"]
     assert preview["episode"].endswith(".mkv")
     assert preview["movie"].endswith(".mkv")
+
+
+def test_availability_checks_per_day_are_validated_and_change_the_interval():
+    settings_store.update_settings({"upcoming_checks_per_day": "6"})
+    assert settings_store.upcoming_checks_per_day() == 6
+    assert settings_store.upcoming_interval().total_seconds() == 4 * 60 * 60
+
+    with pytest.raises(settings_store.SettingsError):
+        settings_store.update_settings({"upcoming_checks_per_day": "25"})

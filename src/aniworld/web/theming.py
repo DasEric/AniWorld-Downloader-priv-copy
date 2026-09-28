@@ -13,7 +13,7 @@ import tempfile
 from pathlib import Path
 from urllib.parse import urlparse
 
-from ..config import ANIWORLD_CONFIG_DIR
+from ..config import H0MELAB_CONFIG_DIR
 from ..logger import get_logger
 
 logger = get_logger(__name__)
@@ -53,11 +53,11 @@ MAX_SHADER_BYTES = 64 * 1024
 
 
 def css_path():
-    return Path(ANIWORLD_CONFIG_DIR) / "custom.css"
+    return Path(H0MELAB_CONFIG_DIR) / "custom.css"
 
 
 def shader_path():
-    return Path(ANIWORLD_CONFIG_DIR) / "custom.frag"
+    return Path(H0MELAB_CONFIG_DIR) / "custom.frag"
 
 
 def _jsdelivr_equivalent(url):

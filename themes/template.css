@@ -1,5 +1,5 @@
 /*
- * AniWorld Downloader theme template
+ * H0melab Downloader theme template
  * =================================
  *
  * Every value below is what the stock dark theme uses. Copy this file, change
@@ -248,7 +248,7 @@
  *   2. body is display:flex; flex-direction:column. A ::before that is not
  *      positioned becomes a flex item and shifts the whole page. Use
  *      position:fixed or absolute for decorative layers.
- *   3. Existing z-index values: .top-bar 50, .overlay 100, .toast 200. Stay out
+ *   3. Existing z-index values: .app-sidebar 60, .overlay 100, .toast 200. Stay out
  *      of their way.
  *   4. Put pointer-events:none on anything decorative, or it eats clicks.
  *
@@ -295,7 +295,7 @@
  *
  * For anything structural, target the class directly. These are worth knowing:
  *
- *   .top-bar          the sticky header
+ *   .app-sidebar      the fixed desktop navigation / mobile drawer
  *   .page .container  the content column, max-width lives here
  *   .segmented        the AniWorld / SerienStream / ... switch
  *   .genre-bar        the discover-by-genre chips

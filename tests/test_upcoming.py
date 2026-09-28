@@ -112,3 +112,47 @@ def test_non_latin_titles_do_not_match_only_because_normalisation_is_empty(monke
     monkeypatch.setattr("aniworld.providers.resolve_provider", lambda _url: provider)
 
     assert upcoming._exact_hit(movie) is None
+
+
+def test_released_movie_and_series_with_same_tmdb_id_can_be_watched(
+    client, monkeypatch
+):
+    released = {**MOVIE, "release_date": "2020-01-01", "release_year": 2020}
+    monkeypatch.setattr(tmdb, "movie_details", lambda _tmdb_id: dict(released))
+    movie = client.post("/api/upcoming", json={"tmdb_id": 42, "media_type": "movie"})
+    assert movie.status_code == 201
+
+    series = {
+        **released,
+        "title": "Released Series",
+        "original_title": "Released Series",
+        "media_type": "tv",
+    }
+    monkeypatch.setattr(tmdb, "media_details", lambda _tmdb_id, _kind: dict(series))
+    tv = client.post("/api/upcoming", json={"tmdb_id": 42, "media_type": "tv"})
+    assert tv.status_code == 201
+    kinds = {
+        item["media_type"] for item in client.get("/api/upcoming").get_json()["items"]
+    }
+    assert kinds == {"movie", "tv"}
+
+
+def test_series_matching_uses_series_sites(monkeypatch):
+    series = {**MOVIE, "media_type": "tv", "release_year": 2020}
+    monkeypatch.setattr(upcoming.settings_store, "site_enabled", lambda _site: True)
+    monkeypatch.setattr(upcoming.sitesearch, "SERIES_SITES", ("sto",))
+    monkeypatch.setattr(
+        upcoming.sitesearch,
+        "search",
+        lambda _site, _title: [
+            {
+                "title": "Future Film",
+                "url": "https://serienstream.to/serie/stream/future-film",
+            }
+        ],
+    )
+    provider = SimpleNamespace(
+        series_cls=lambda url: SimpleNamespace(release_year="2020-2024")
+    )
+    monkeypatch.setattr("aniworld.providers.resolve_provider", lambda _url: provider)
+    assert upcoming._exact_hit(series)["url"].startswith("https://serienstream.to/")

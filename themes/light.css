@@ -1,11 +1,11 @@
 /*
  * Light
- * A full light theme for AniWorld Downloader, built only from the variables in
+ * A full light theme for H0melab Downloader, built only from the variables in
  * template.css. Nothing here targets a class name, so it keeps working when the
  * markup changes.
  *
  * Paste into Settings -> Appearance, or import it:
- *   @import url('https://cdn.jsdelivr.net/gh/phoenixthrush/AniWorld-Downloader@main/themes/light.css');
+ *   @import url('https://cdn.jsdelivr.net/gh/DasEric/H0melab-Downloader-V2@main/themes/light.css');
  */
 
 :root {

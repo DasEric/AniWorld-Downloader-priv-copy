@@ -1,31 +1,24 @@
 [project]
-name = "aniworld"
-version = "5.0.6"
-authors = [{ name = "Phoenixthrush UwU", email = "contact@phoenixthrush.com" }]
-maintainers = [
-  { name = "Phoenixthrush UwU", email = "contact@phoenixthrush.com" },
-  { name = "Sirox", email = "iloveshell@proton.me"}
-]
-description = "AniWorld-Downloader is a command-line tool for downloading and streaming movies and series."
+name = "h0melab-downloader"
+version = "2.0.0"
+authors = [{ name = "DasEric" }]
+maintainers = [{ name = "DasEric" }]
+description = "Browser-based downloader and media automation hub for a homelab."
 readme = "README.md"
 requires-python = ">=3.11"
 # requires version numbers from 06/2026
 dependencies = [
   "certifi",                                                                  # CA bundle for bundled runtimes
   "niquests",                                                                 # >=3.7
-  "npyscreen",                                                                # >=3.7
   "ffmpeg-python",                                                            # ???
   "python-dotenv",                                                            # >=3.10
-  "rich",                                                                     # >=3.9.0
   "flask",                                                                    # >=3.9
   "flask-wtf",                                                                # >=3.10
   "waitress",                                                                 # >=3.9.0
-  "packaging",                                                                # >=3.8
   "cryptography",                                                             # !=3.9.0, !=3.9.1, >=3.9
   "patchright",                                                               # >=3.9
   "curl_cffi",                                                                # TLS impersonation for Cloudflare-gated hosters (VOE)
   "yt-dlp",                                                                   # resilient multi-fragment transfer fallback
-  'windows-curses<3.14; sys_platform == "win32" and python_version < "3.14"', # ??? - npyscreen on Windows
 ]
 
 
@@ -53,22 +46,15 @@ all = [
 
 
 [project.urls]
-homepage = "https://github.com/phoenixthrush/AniWorld-Downloader"
-changelog = "https://github.com/phoenixthrush/AniWorld-Downloader/commits/models"
-documentation = "https://www.phoenixthrush.com/AniWorld-Downloader-Docs/"
-bugs = "https://github.com/phoenixthrush/AniWorld-Downloader/issues"
-issues = "https://github.com/phoenixthrush/AniWorld-Downloader/issues"
-tracker = "https://github.com/phoenixthrush/AniWorld-Downloader/issues"
-download = "https://pypi.org/project/aniworld/#files"
-sponsor = "https://github.com/sponsors/phoenixthrush"
-funding = "https://github.com/sponsors/phoenixthrush"
-donate = "https://github.com/sponsors/phoenixthrush"
-discord = "https://discord.com/invite/BfDvrKd8V5"
+Homepage = "https://github.com/DasEric/H0melab-Downloader-V2"
+Repository = "https://github.com/DasEric/H0melab-Downloader-V2"
+Documentation = "https://github.com/DasEric/H0melab-Downloader-V2#readme"
+Changelog = "https://github.com/DasEric/H0melab-Downloader-V2/commits"
+Issues = "https://github.com/DasEric/H0melab-Downloader-V2/issues"
 
 [tool.setuptools.package-data]
 aniworld = [
   ".env.example",
-  "ascii/ASCII.txt",
   "aniskip/scripts/*.lua",
   "web/templates/*.html",
   "web/static/*.css",
@@ -82,10 +68,14 @@ aniworld = [
 ]
 
 [project.scripts]
-aniworld = "aniworld.__main__:main"
+h0melab-downloader = "aniworld.web_entry:main"
+# Upgrade compatibility: the previous launcher now starts the same browser UI.
+aniworld = "aniworld.web_entry:main"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# Always test this checkout instead of a different globally/editably installed copy.
+pythonpath = ["src"]
 # The two legacy scripts in tests/ are manual smoke checks against the live
 # sites. They expose no test functions, so pytest collects nothing from them.
 python_files = ["test_*.py"]

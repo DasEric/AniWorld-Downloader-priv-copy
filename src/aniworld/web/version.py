@@ -9,7 +9,7 @@ from pathlib import Path
 def get_version():
     """Installed package version, falling back to pyproject when run from source."""
     try:
-        installed = package_version("aniworld")
+        installed = package_version("h0melab-downloader")
         if installed:
             return installed
     except PackageNotFoundError:

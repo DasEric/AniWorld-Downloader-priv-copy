@@ -33,7 +33,7 @@ Paste the full output (best with `--debug`). If it’s long, attach a file.
 
 - OS: (Windows/macOS/Linux + version)
 - Install method: (pip / pipx / from source / exe)
-- AniWorld-Downloader version: (`aniworld --version` / `pip show aniworld` / git hash)
+- H0melab Downloader version: (shown in the sidebar or provide the git hash)
 - Python version: (`python --version`) (skip if using exe)
 - How you ran it: (terminal, PowerShell, double-click, scheduler, etc.)
 
@@ -41,8 +41,8 @@ Paste the full output (best with `--debug`). If it’s long, attach a file.
 
 If possible, attach your AniWorld config file:
 
-- Linux/macOS: `~/.aniworld/.env`
-- Windows: `%USERPROFILE%\.aniworld\.env`
+- Linux/macOS: `~/.h0melab-downloader/.env`
+- Windows: `%USERPROFILE%\.h0melab-downloader\.env`
 
 If you added anything custom, quickly review it first and remove anything you wouldn’t want public.
 

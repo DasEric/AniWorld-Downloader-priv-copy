@@ -30,7 +30,7 @@ def ensure_started():
             return
         _started = True
     db.reset_stale_running()
-    threading.Thread(target=_run, name="aniworld-queue", daemon=True).start()
+    threading.Thread(target=_run, name="h0melab-queue", daemon=True).start()
 
 
 def _claim_next():

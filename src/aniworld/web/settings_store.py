@@ -6,16 +6,18 @@ config directory and loaded with priority on the next start.
 """
 
 import os
+from datetime import timedelta
 
 import niquests as requests
-from dotenv import load_dotenv
+from dotenv import dotenv_values, load_dotenv
 
 from ..config import (
-    ANIWORLD_CONFIG_DIR,
+    H0MELAB_CONFIG_DIR,
     LANG_LABELS,
     get_provider_fallback_order,
     parse_provider_order,
 )
+from ..env import modern_env_key, persist_env_values, sync_env_aliases
 from ..logger import get_logger
 from . import paths, schedule
 from .media import SITE_KEYS, SITE_LABELS, SITES_OFF_BY_DEFAULT, WORKING_PROVIDERS
@@ -26,8 +28,20 @@ logger = get_logger(__name__)
 # .env is deliberately loaded without overriding real process variables, while
 # a choice explicitly saved in the panel must beat image defaults after a
 # restart (notably ANIWORLD_DOWNLOAD_PATH in Docker).
-PANEL_SETTINGS_PATH = ANIWORLD_CONFIG_DIR / ".web-settings.env"
+PANEL_SETTINGS_PATH = H0MELAB_CONFIG_DIR / ".web-settings.env"
+if PANEL_SETTINGS_PATH.exists():
+    _legacy_panel = dotenv_values(PANEL_SETTINGS_PATH)
+    _panel_v2 = {
+        modern_env_key(key): value
+        for key, value in _legacy_panel.items()
+        if key.startswith("ANIWORLD_")
+        and modern_env_key(key) not in _legacy_panel
+        and value is not None
+    }
+    if _panel_v2:
+        persist_env_values(PANEL_SETTINGS_PATH, _panel_v2)
 load_dotenv(PANEL_SETTINGS_PATH, override=True)
+sync_env_aliases()
 
 UI_LANGUAGES = ("en", "de")
 OUTPUT_FORMATS = ("mkv", "mp4")
@@ -35,6 +49,10 @@ DEFAULT_HLS_CONCURRENCY = 8
 MIN_HLS_CONCURRENCY = 1
 MAX_HLS_CONCURRENCY = 32
 TMDB_KEY = "ANIWORLD_TMDB_API_KEY"
+UPCOMING_CHECKS_KEY = "ANIWORLD_UPCOMING_CHECKS_PER_DAY"
+DEFAULT_UPCOMING_CHECKS_PER_DAY = 1
+MIN_UPCOMING_CHECKS_PER_DAY = 1
+MAX_UPCOMING_CHECKS_PER_DAY = 24
 
 # How Auto-Sync decides when to run: every so often, or at fixed times
 AUTOSYNC_MODES = ("interval", "cron")
@@ -218,6 +236,19 @@ def tmdb_settings():
     return {"key_set": bool(os.environ.get(TMDB_KEY, "").strip())}
 
 
+def upcoming_checks_per_day():
+    raw = os.environ.get(UPCOMING_CHECKS_KEY, DEFAULT_UPCOMING_CHECKS_PER_DAY)
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        return DEFAULT_UPCOMING_CHECKS_PER_DAY
+    return value if MIN_UPCOMING_CHECKS_PER_DAY <= value <= MAX_UPCOMING_CHECKS_PER_DAY else DEFAULT_UPCOMING_CHECKS_PER_DAY
+
+
+def upcoming_interval():
+    return timedelta(seconds=86400 / upcoming_checks_per_day())
+
+
 def _collect_tmdb(payload, updates):
     if not isinstance(payload, dict):
         raise SettingsError("tmdb must be an object")
@@ -397,7 +428,12 @@ def _persist_settings(updates):
     try:
         from ..env import persist_env_values
 
-        persist_env_values(PANEL_SETTINGS_PATH, updates)
+        # Write v2 keys while retaining v1 aliases during the transition. This
+        # keeps rollback possible and lets an older container read a volume
+        # after a test upgrade without losing settings.
+        compatible = dict(updates)
+        compatible.update({modern_env_key(key): value for key, value in updates.items()})
+        persist_env_values(PANEL_SETTINGS_PATH, compatible)
     except OSError as exc:
         raise SettingsPersistenceError(
             "The settings could not be written to the persistent config directory"
@@ -428,6 +464,9 @@ def read_settings():
         "hls_concurrency": hls_concurrency(),
         "hls_concurrency_min": MIN_HLS_CONCURRENCY,
         "hls_concurrency_max": MAX_HLS_CONCURRENCY,
+        "upcoming_checks_per_day": upcoming_checks_per_day(),
+        "upcoming_checks_per_day_min": MIN_UPCOMING_CHECKS_PER_DAY,
+        "upcoming_checks_per_day_max": MAX_UPCOMING_CHECKS_PER_DAY,
         "provider_fallback_order": list(get_provider_fallback_order(WORKING_PROVIDERS)),
         "available_providers": list(WORKING_PROVIDERS),
         "available_ui_languages": list(UI_LANGUAGES),
@@ -565,6 +604,20 @@ def update_settings(data):
             )
         updates["ANIWORLD_HLS_CONCURRENCY"] = str(value)
 
+    if "upcoming_checks_per_day" in data:
+        raw = data["upcoming_checks_per_day"]
+        if isinstance(raw, bool):
+            raise SettingsError("upcoming_checks_per_day must be an integer")
+        try:
+            value = int(raw)
+        except (TypeError, ValueError):
+            raise SettingsError("upcoming_checks_per_day must be an integer") from None
+        if str(raw).strip() != str(value) or not MIN_UPCOMING_CHECKS_PER_DAY <= value <= MAX_UPCOMING_CHECKS_PER_DAY:
+            raise SettingsError(
+                f"upcoming_checks_per_day must be between {MIN_UPCOMING_CHECKS_PER_DAY} and {MAX_UPCOMING_CHECKS_PER_DAY}"
+            )
+        updates[UPCOMING_CHECKS_KEY] = str(value)
+
     _collect_autosync_schedule(data, updates)
     _check_a_site_is_left(data)
 
@@ -613,6 +666,7 @@ def _env_sections():
                     ",".join(get_provider_fallback_order(WORKING_PROVIDERS)),
                 ),
                 ("ANIWORLD_HLS_CONCURRENCY", str(hls_concurrency())),
+                (UPCOMING_CHECKS_KEY, str(upcoming_checks_per_day())),
                 (
                     "ANIWORLD_LANG_SEPARATION",
                     _one_or_zero(paths.lang_separation_enabled()),
@@ -672,7 +726,7 @@ def _env_value(value):
 def export_env():
     """The running settings as the text of a .env file."""
     lines = [
-        "# AniWorld Downloader settings, exported from the web UI.",
+        "# H0melab Downloader settings, exported from the web UI.",
         "#",
         "# These are the values this instance is running with right now. Panel",
         "# changes are already stored persistently; this file is a portable backup",
@@ -684,7 +738,22 @@ def export_env():
     for heading, entries in _env_sections():
         lines.append("")
         lines.append(f"# ===== {heading} =====")
-        lines.extend(f"{key}={_env_value(value)}" for key, value in entries)
+        lines.extend(
+            f"{modern_env_key(key)}={_env_value(value)}" for key, value in entries
+        )
+    lines.extend(
+        [
+            "",
+            "# ===== v1 rollback aliases (read-only compatibility) =====",
+            "# These aliases let the same export boot one final v1 container during rollback.",
+        ]
+    )
+    for _heading, entries in _env_sections():
+        lines.extend(
+            f"{key}={_env_value(value)}"
+            for key, value in entries
+            if key.startswith("ANIWORLD_")
+        )
     return "\n".join(lines) + "\n"
 
 
@@ -696,7 +765,7 @@ def fetch_public_ip():
     for url in _IP_LOOKUP_URLS:
         try:
             response = requests.get(
-                url, headers={"User-Agent": "AniWorld Downloader"}, timeout=5
+                url, headers={"User-Agent": "H0melab Downloader"}, timeout=5
             )
             response.raise_for_status()
             payload = response.json()

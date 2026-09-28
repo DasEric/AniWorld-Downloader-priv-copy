@@ -318,7 +318,7 @@ def test_a_key_is_returned_exactly_once(client):
     response = client.post("/api/keys", json={"name": "ci", "scope": "read"})
     assert response.status_code == 200
     raw = response.get_json()["key"]
-    assert raw.startswith("awd_")
+    assert raw.startswith("h0d_")
 
     listed = client.get("/api/keys").get_json()["keys"]
     assert raw not in str(listed), "the plain key must never be listed again"
@@ -440,7 +440,7 @@ def test_the_settings_can_be_downloaded_as_an_env_file(client):
     response = client.get("/api/settings/env")
     assert response.status_code == 200
     assert "attachment" in response.headers["Content-Disposition"]
-    assert "aniworld.env" in response.headers["Content-Disposition"]
+    assert "h0melab.env" in response.headers["Content-Disposition"]
     assert response.mimetype == "text/plain"
 
 

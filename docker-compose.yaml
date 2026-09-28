@@ -1,7 +1,7 @@
 services:
-  aniworld:
-    image: ghcr.io/phoenixthrush/aniworld-downloader:latest
-    container_name: aniworld-downloader
+  h0melab:
+    image: ghcr.io/daseric/h0melab-downloader-v2:latest
+    container_name: h0melab-downloader
     # build: .
     ports:
       - "8080:8080"
@@ -12,7 +12,7 @@ services:
       # the database (users, API keys, custom paths, Auto-Sync series), your
       # .env, and the custom.css / custom.frag a theme is saved to. Losing this
       # volume loses all of them.
-      - aniworld-data:/home/aniworld/.aniworld
+      - h0melab-data:/home/h0melab/.h0melab-downloader
 
     # NOTE: Create ./Downloads before running: mkdir -p Downloads
     # Docker creates missing bind-mount directories as root, causing permission errors.
@@ -28,76 +28,80 @@ services:
 
     # environment:
     # --- General settings (uncomment the environment block to customise) ---
-    #   ANIWORLD_LANGUAGE: "German Dub"               # Default language (German Dub | English Sub | German Sub | English Dub)
-    #   ANIWORLD_PROVIDER: "VOE"                      # Default streaming provider
-    #   ANIWORLD_PROVIDER_FALLBACK_ORDER: "VOE,Vidmoly,Vidoza,Doodstream"  # Tried in order after the selected provider fails
-    #   ANIWORLD_NAMING_TEMPLATE: "{title} ({year}) [imdbid-{imdbid}]/Season {season}/{title} S{season}E{episode}.mkv"
-    #   ANIWORLD_VIDEO_CODEC: "copy"                  # Video codec: copy | h264 | h265 | av1 | h264_nvenc | hevc_nvenc | h264_amf | hevc_amf | av1_amf
-    #   ANIWORLD_LANG_SEPARATION: "0"                 # Separate downloads into language subfolders (german-dub/, english-sub/)
-    #   ANIWORLD_MOVIE_FOLDER: "1"                    # 1 = wrap a movie in its own "Title (Year)" folder, 0 = save it directly
-    #   ANIWORLD_DISABLE_ENGLISH_SUB: "0"             # Block English Sub downloads entirely
-    #   ANIWORLD_UI_LANGUAGE: "en"                    # Web UI language: en | de
-    #   ANIWORLD_DEBUG_MODE: "0"                      # Enable debug logging
-    #   ANIWORLD_NO_AUTO_INSTALL: "0"                 # 1 = never fetch missing dependencies at runtime
-    #   ANIWORLD_HLS_CONCURRENCY: "8"                 # Parallel HLS segments (1 disables; Moflix is excluded)
-    #   # ANIWORLD_DOWNLOAD_PATH is already set to /app/Downloads by the image;
+    #   H0MELAB_LANGUAGE: "German Dub"               # Default language (German Dub | English Sub | German Sub | English Dub)
+    #   H0MELAB_PROVIDER: "VOE"                      # Default streaming provider
+    #   H0MELAB_PROVIDER_FALLBACK_ORDER: "VOE,Vidmoly,Vidoza,Doodstream"  # Tried in order after the selected provider fails
+    #   H0MELAB_NAMING_TEMPLATE: "{title} ({year}) [imdbid-{imdbid}]/Season {season}/{title} S{season}E{episode}.mkv"
+    #   H0MELAB_VIDEO_CODEC: "copy"                  # Video codec: copy | h264 | h265 | av1 | h264_nvenc | hevc_nvenc | h264_amf | hevc_amf | av1_amf
+    #   H0MELAB_LANG_SEPARATION: "0"                 # Separate downloads into language subfolders (german-dub/, english-sub/)
+    #   H0MELAB_MOVIE_FOLDER: "1"                    # 1 = wrap a movie in its own "Title (Year)" folder, 0 = save it directly
+    #   H0MELAB_DISABLE_ENGLISH_SUB: "0"             # Block English Sub downloads entirely
+    #   H0MELAB_UI_LANGUAGE: "en"                    # Web UI language: en | de
+    #   H0MELAB_DEBUG_MODE: "0"                      # Enable debug logging
+    #   H0MELAB_NO_AUTO_INSTALL: "0"                 # 1 = never fetch missing dependencies at runtime
+    #   H0MELAB_HLS_CONCURRENCY: "8"                 # Parallel HLS segments (1 disables; Moflix is excluded)
+    #   H0MELAB_UPCOMING_CHECKS_PER_DAY: "1"         # Availability checks per day (1-24)
+    #   # H0MELAB_DOWNLOAD_PATH is already set to /app/Downloads by the image;
     #   # change the volume above rather than this, or the bind mount stops matching.
 
     # --- Features (uncomment the environment block to customise) ---
-    #   ANIWORLD_ENABLE_LIBRARY: "1"                  # Library tab: browse and delete downloaded files
-    #   ANIWORLD_ENABLE_HTV: "0"                      # Show the Hanime tab (adult content)
-    #   ANIWORLD_ENABLE_ANIWORLD: "1"                 # Every site has a toggle: ANIWORLD | STO | MEGAKINO | CINEBY |
-    #   ANIWORLD_ENABLE_STO: "1"                      # FILMPALAST | MANGAFIRE | HTV | KINOX | BURNINGSERIES.
-    #   ANIWORLD_ENABLE_MEGAKINO: "1"                 # Off means no tab and no rows on the home page.
-    #   ANIWORLD_ENABLE_CINEBY: "0"                   # At least one has to stay on.
-    #   ANIWORLD_ENABLE_FILMPALAST: "1"
-    #   ANIWORLD_ENABLE_MANGAFIRE: "1"
-    #   ANIWORLD_ENABLE_AUTOSYNC: "0"                 # Auto-Sync: keep explicitly selected AniWorld/SerienStream series current
-    #   ANIWORLD_AUTOSYNC_NEW_ONLY: "0"               # 0 = fill gaps, 1 = only availability added after tracking began
-    #   ANIWORLD_AUTOSYNC_MODE: "interval"            # When Auto-Sync runs: interval (every so often) | cron (fixed times)
-    #   ANIWORLD_AUTOSYNC_INTERVAL: "24h"             # Interval mode: 24h | 6h | 90m | 1h30m (a bare number means hours)
-    #   ANIWORLD_AUTOSYNC_CRON: "0 3 * * *"           # Cron mode, local time. Plain language works too ("every monday, friday at 10pm")
+    #   H0MELAB_ENABLE_LIBRARY: "1"                  # Library tab: browse and delete downloaded files
+    #   H0MELAB_ENABLE_HTV: "0"                      # Show the Hanime tab (adult content)
+    #   H0MELAB_ENABLE_ANIWORLD: "1"                 # Every site has a toggle: ANIWORLD | STO | MEGAKINO | CINEBY |
+    #   H0MELAB_ENABLE_STO: "1"                      # FILMPALAST | MANGAFIRE | HTV | KINOX | BURNINGSERIES.
+    #   H0MELAB_ENABLE_MEGAKINO: "1"                 # Off means no tab and no rows on the home page.
+    #   H0MELAB_ENABLE_CINEBY: "0"                   # At least one has to stay on.
+    #   H0MELAB_ENABLE_FILMPALAST: "1"
+    #   H0MELAB_ENABLE_MANGAFIRE: "1"
+    #   H0MELAB_ENABLE_AUTOSYNC: "0"                 # Auto-Sync: keep explicitly selected AniWorld/SerienStream series current
+    #   H0MELAB_AUTOSYNC_NEW_ONLY: "0"               # 0 = fill gaps, 1 = only availability added after tracking began
+    #   H0MELAB_AUTOSYNC_MODE: "interval"            # When Auto-Sync runs: interval (every so often) | cron (fixed times)
+    #   H0MELAB_AUTOSYNC_INTERVAL: "24h"             # Interval mode: 24h | 6h | 90m | 1h30m (a bare number means hours)
+    #   H0MELAB_AUTOSYNC_CRON: "0 3 * * *"           # Cron mode, local time. Plain language works too ("every monday, friday at 10pm")
     #   MANGAFIRE_FORMAT: "jpg"                       # MangaFire output: jpg (images) | cbz (archive)
-    #   ANIWORLD_KINOX_DOMAIN: ""                     # Override the Kinox domain if the default one is unreachable
+    #   H0MELAB_KINOX_DOMAIN: ""                     # Override the Kinox domain if the default one is unreachable
 
     # --- Authentication (uncomment the environment block to enable) ---
-    #   ANIWORLD_WEB_AUTH: "1"                        # Enable local username/password login
-    #   ANIWORLD_WEB_ADMIN_USER: ""                   # Auto-create admin on first run (skip setup page)
-    #   ANIWORLD_WEB_ADMIN_PASS: ""                   # Password for auto-created admin
-    #   ANIWORLD_WEB_SSO: "1"                         # Enable OIDC SSO login button
-    #   ANIWORLD_WEB_FORCE_SSO: "1"                   # SSO-only mode (no local accounts)
+    #   H0MELAB_WEB_AUTH: "1"                        # Enable local username/password login
+    #   H0MELAB_WEB_ADMIN_USER: ""                   # Auto-create admin on first run (skip setup page)
+    #   H0MELAB_WEB_ADMIN_PASS: ""                   # Password for auto-created admin
+    #   H0MELAB_WEB_SSO: "1"                         # Enable OIDC SSO login button
+    #   H0MELAB_WEB_FORCE_SSO: "1"                   # SSO-only mode (no local accounts)
     #   # OIDC / SSO provider settings (required when SSO is enabled)
-    #   ANIWORLD_OIDC_ISSUER_URL: "https://keycloak.example.com/realms/myrealm"
-    #   ANIWORLD_OIDC_CLIENT_ID: "aniworld"
-    #   ANIWORLD_OIDC_CLIENT_SECRET: "secret"
-    #   ANIWORLD_OIDC_DISPLAY_NAME: "SSO"             # Label shown on login button
-    #   ANIWORLD_OIDC_ADMIN_USER: ""                  # SSO username auto-promoted to admin
-    #   ANIWORLD_OIDC_ADMIN_SUBJECT: ""               # OIDC subject claim for auto-admin (preferred over username)
-    #   ANIWORLD_WEB_BASE_URL: "https://aniworld.example.com"  # External URL for redirects
+    #   H0MELAB_OIDC_ISSUER_URL: "https://keycloak.example.com/realms/myrealm"
+    #   H0MELAB_OIDC_CLIENT_ID: "h0melab-downloader"
+    #   H0MELAB_OIDC_CLIENT_SECRET: "secret"
+    #   H0MELAB_OIDC_DISPLAY_NAME: "SSO"             # Label shown on login button
+    #   H0MELAB_OIDC_ADMIN_USER: ""                  # SSO username auto-promoted to admin
+    #   H0MELAB_OIDC_ADMIN_SUBJECT: ""               # OIDC subject claim for auto-admin (preferred over username)
+    #   H0MELAB_WEB_BASE_URL: "https://h0melab.example.com"  # External URL for redirects
 
     # --- Discord request bot (uncomment the environment block to enable) ---
     # Like the other panel settings, bot fields are stored in the config volume
     # when saved in the Web UI, so setting them here is optional.
-    #   ANIWORLD_DISCORD_BOT_ENABLED: "1"             # Let users request titles from Discord
-    #   ANIWORLD_DISCORD_TOKEN: ""                    # Bot token from the Discord developer portal
-    #   ANIWORLD_DISCORD_OWNER_ID: ""                 # Your user ID, requests are sent here for approval
-    #   ANIWORLD_DISCORD_MODE: "standard"             # standard = you approve each request, advanced = queued immediately
-    #   ANIWORLD_DISCORD_REQUEST_ROLE_ID: ""          # Only this role may request, empty allows everyone
-    #   ANIWORLD_DISCORD_GUILD_ID: ""                 # Register slash commands in one server (instant), empty = global
-    #   ANIWORLD_DISCORD_LANGUAGE: "en"               # Bot language: en | de
-    #   ANIWORLD_DISCORD_ANNOUNCE_CHANNEL_ID: ""      # Post "now available" here when a requested download finishes
+    #   H0MELAB_DISCORD_BOT_ENABLED: "1"             # Let users request titles from Discord
+    #   H0MELAB_DISCORD_TOKEN: ""                    # Bot token from the Discord developer portal
+    #   H0MELAB_DISCORD_OWNER_ID: ""                 # Your user ID, requests are sent here for approval
+    #   H0MELAB_DISCORD_MODE: "standard"             # standard = you approve each request, advanced = queued immediately
+    #   H0MELAB_DISCORD_REQUEST_ROLE_ID: ""          # Only this role may request, empty allows everyone
+    #   H0MELAB_DISCORD_GUILD_ID: ""                 # Register slash commands in one server (instant), empty = global
+    #   H0MELAB_DISCORD_LANGUAGE: "en"               # Bot language: en | de
+    #   H0MELAB_DISCORD_ANNOUNCE_CHANNEL_ID: ""      # Post "now available" here when a requested download finishes
 
     # --- Captcha solving (uncomment the environment block to tune) ---
     # Kinox asks for a captcha on every download and serienstream.to sometimes
     # does. The container already ships Chromium and Xvfb for this; these only
     # matter if solving misbehaves. The full list is in src/aniworld/.env.example.
-    #   ANIWORLD_CAPTCHA_MANUAL: "0"                  # 1 = never auto-click, only your click in the Web UI counts
-    #   ANIWORLD_CAPTCHA_TIMEOUT: ""                  # Seconds to wait for a solve, empty uses the built-in default
-    #   ANIWORLD_CAPTCHA_DEBUG_LOG: "1"               # Log the captcha browser's console and network errors
-    #   ANIWORLD_NO_ADBLOCK: "0"                      # 1 = disable the ad-blocker, try this if a captcha page won't load
-    #   ANIWORLD_SPOOF_WEBGL: "0"                     # 1 = mask SwiftShader on GPU-less servers
+    #   H0MELAB_CAPTCHA_MANUAL: "0"                  # 1 = never auto-click, only your click in the Web UI counts
+    #   H0MELAB_CAPTCHA_TIMEOUT: ""                  # Seconds to wait for a solve, empty uses the built-in default
+    #   H0MELAB_CAPTCHA_DEBUG_LOG: "1"               # Log the captcha browser's console and network errors
+    #   H0MELAB_NO_ADBLOCK: "0"                      # 1 = disable the ad-blocker, try this if a captcha page won't load
+    #   H0MELAB_SPOOF_WEBGL: "0"                     # 1 = mask SwiftShader on GPU-less servers
 
     restart: unless-stopped
 
 volumes:
-  aniworld-data:
+  h0melab-data:
+    # Keep the v1 volume name so `docker compose pull && up -d` migrates the
+    # existing database, accounts, themes and settings instead of starting over.
+    name: aniworld-data

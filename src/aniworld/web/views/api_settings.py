@@ -106,7 +106,7 @@ def export_env():
     return Response(
         settings_store.export_env(),
         mimetype="text/plain",
-        headers={"Content-Disposition": 'attachment; filename="aniworld.env"'},
+        headers={"Content-Disposition": 'attachment; filename="h0melab.env"'},
     )
 
 

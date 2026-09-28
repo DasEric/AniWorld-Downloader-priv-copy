@@ -96,9 +96,9 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     fi
 
 # Create unprivileged user
-RUN adduser --disabled-password --gecos "" aniworld \
-    && mkdir -p /app/Downloads /home/aniworld/.aniworld \
-    && chown -R aniworld:aniworld /app /home/aniworld
+RUN adduser --disabled-password --gecos "" h0melab \
+    && mkdir -p /app/Downloads /home/h0melab/.h0melab-downloader \
+    && chown -R h0melab:h0melab /app /home/h0melab
 
 # Install minimal system dependencies (xvfb and core Chromium shared libraries) (with cache)
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
@@ -134,20 +134,20 @@ COPY --from=builder /ms-playwright /ms-playwright
 ENV PATH="/opt/venv/bin:$PATH" \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    ANIWORLD_DOWNLOAD_PATH=/app/Downloads \
+    H0MELAB_DOWNLOAD_PATH=/app/Downloads \
     DISPLAY=:99 \
     PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
     NODE_EXTRA_CA_CERTS=/etc/ssl/certs/ca-certificates.crt
 
 # Ensure Downloads and configuration paths are writable by the unprivileged user
-RUN chown -R aniworld:aniworld /app/Downloads /home/aniworld/.aniworld
+RUN chown -R h0melab:h0melab /app/Downloads /home/h0melab/.h0melab-downloader
 
-USER aniworld
+USER h0melab
 
 EXPOSE 8080
 
 # This command will be inherited by the final stage
-CMD ["sh", "-c", "Xvfb :99 -screen 0 1280x720x24 -nolisten tcp & sleep 1 && exec aniworld --web-ui --web-expose --no-browser --web-port 8080"]
+CMD ["sh", "-c", "Xvfb :99 -screen 0 1280x720x24 -nolisten tcp & sleep 1 && exec h0melab-downloader"]
 
 
 # ==========================================
@@ -162,15 +162,15 @@ COPY --from=runner / /
 ENV PATH="/opt/venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    ANIWORLD_DOWNLOAD_PATH=/app/Downloads \
+    H0MELAB_DOWNLOAD_PATH=/app/Downloads \
     DISPLAY=:99 \
     PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
     NODE_EXTRA_CA_CERTS=/etc/ssl/certs/ca-certificates.crt
 
 WORKDIR /app
 
-USER aniworld
+USER h0melab
 
 EXPOSE 8080
 
-CMD ["sh", "-c", "Xvfb :99 -screen 0 1280x720x24 -nolisten tcp & sleep 1 && exec aniworld --web-ui --web-expose --no-browser --web-port 8080"]
+CMD ["sh", "-c", "Xvfb :99 -screen 0 1280x720x24 -nolisten tcp & sleep 1 && exec h0melab-downloader"]
