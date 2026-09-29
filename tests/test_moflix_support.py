@@ -3,6 +3,7 @@
 import base64
 import json
 from types import SimpleNamespace
+from unittest.mock import MagicMock, Mock
 
 import pytest
 
@@ -622,6 +623,34 @@ def test_veev_uses_player_handshake(monkeypatch):
     monkeypatch.setattr(captcha, "playwright_get_veev_stream_url", lambda _url: direct)
 
     assert veev.get_direct_link_from_veev("https://veev.to/e/sample") == direct
+
+
+def test_veev_uses_headless_browser_without_linux_display(monkeypatch):
+    from patchright import sync_api
+
+    from h0melab import autodeps
+    from h0melab.playwright import captcha
+
+    monkeypatch.delenv("DISPLAY", raising=False)
+    monkeypatch.setattr(autodeps, "PLATFORM", "Linux")
+    ensure_xvfb = Mock()
+    monkeypatch.setattr(autodeps, "_ensure_xvfb", ensure_xvfb)
+
+    runtime = MagicMock()
+    playwright = MagicMock()
+    playwright.return_value.__enter__.return_value = runtime
+    monkeypatch.setattr(sync_api, "sync_playwright", playwright)
+
+    def launch(_runtime, **kwargs):
+        assert kwargs == {"offscreen": False, "headless": True}
+        raise RuntimeError("capture stopped after launch assertion")
+
+    monkeypatch.setattr(captcha, "_launch_browser_context", launch)
+
+    with pytest.raises(RuntimeError, match="capture stopped after launch assertion"):
+        captcha.playwright_get_veev_stream_url("https://veev.to/e/sample")
+
+    ensure_xvfb.assert_called_once_with()
 
 
 @pytest.mark.parametrize("url", ["http://veev.to/e/sample", "https://example.com/e/x"])

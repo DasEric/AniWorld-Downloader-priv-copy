@@ -615,7 +615,7 @@ class _BrowserHandle:
 
 
 def _launch_browser_context(
-    p, offscreen=False, ad_home=None, weiter_event=None
+    p, offscreen=False, ad_home=None, weiter_event=None, headless=False
 ) -> _BrowserHandle:
     """Launch a hardened patchright context.
 
@@ -641,7 +641,7 @@ def _launch_browser_context(
         got_lock = True
         try:
             context = p.chromium.launch_persistent_context(
-                _resolve_profile_dir(), headless=False, args=args, **ctx_kwargs
+                _resolve_profile_dir(), headless=headless, args=args, **ctx_kwargs
             )
         except Exception:
             context = None
@@ -651,7 +651,7 @@ def _launch_browser_context(
                 pass
             got_lock = False
     if context is None:
-        browser = p.chromium.launch(headless=False, args=args)
+        browser = p.chromium.launch(headless=headless, args=args)
         context = browser.new_context(**ctx_kwargs)
     _install_stealth(context, ad_home=ad_home, weiter_event=weiter_event)
     return _BrowserHandle(context, browser, got_lock)
@@ -2082,8 +2082,24 @@ def playwright_get_veev_stream_url(url: str, timeout: int = 30) -> str:
     final_url = None
 
     try:
+        # The shared browser launcher normally uses headed Chromium because the
+        # CAPTCHA flows need a real display.  Veev only needs its JavaScript
+        # player handshake.  Prefer Xvfb when it is available, but fall back to
+        # Chromium's native headless mode on Linux services without DISPLAY so
+        # this provider does not fail before the page is even opened.
+        import os
+
+        from ..autodeps import PLATFORM, _ensure_xvfb
+
+        _ensure_xvfb()
+        use_headless = PLATFORM == "Linux" and not os.environ.get("DISPLAY")
+        if use_headless:
+            logger.info("No X display available; launching Veev capture headless")
+
         with sync_playwright() as p:
-            _handle = _launch_browser_context(p, offscreen=True)
+            _handle = _launch_browser_context(
+                p, offscreen=not use_headless, headless=use_headless
+            )
             page = _handle.context.new_page()
 
             def _capture(response):
