@@ -110,6 +110,9 @@
     });
     return [
       item.language,
+      item.subtitle_language === "deu"
+        ? t("queue.german_subtitles", "German subtitles")
+        : null,
       provider,
       ACTIVE.includes(item.status) ? counter : null,
       durationLabel(item)

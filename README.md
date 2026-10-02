@@ -14,6 +14,7 @@ H0melab Downloader is a browser-based media downloader maintained by [DasEric](h
 - Film, series, anime, manga, and library workflows
 - Persistent queue with total and current-episode progress
 - Configurable parallel HLS transfer count
+- Optional German soft subtitles for SerienStream, remuxed for Plex and Jellyfin
 - Auto-Sync for explicitly selected series
 - TMDB availability watchlist for upcoming **and already released** films or series
 - Strict automatic matching: direct TMDB identity or exact title and year

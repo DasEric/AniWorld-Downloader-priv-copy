@@ -235,6 +235,17 @@
     </div>
     {% endif %}
 
+    <div class="control-row" id="subtitleRow" hidden>
+      <label class="field">
+        <span class="field-label" data-i18n="index.subtitles">Subtitles</span>
+        <select id="subtitleSelect">
+          <option value="none" data-i18n="index.subtitles_none">No subtitles</option>
+          <option value="deu" data-i18n="index.subtitles_german">German</option>
+        </select>
+      </label>
+      <span class="hint" data-i18n="index.subtitles_hint">Availability is checked separately for every episode and hoster.</span>
+    </div>
+
     <div class="episodes-header">
       <h3 data-i18n="index.episodes">Episodes</h3>
       <label class="checkbox">
@@ -276,5 +287,5 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="{{ url_for('static', filename='home.js') }}?v={{ app_version }}-autosync-checkbox"></script>
+<script src="{{ url_for('static', filename='home.js') }}?v={{ app_version }}-serienstream-soft-subs-autosync-fix"></script>
 {% endblock %}

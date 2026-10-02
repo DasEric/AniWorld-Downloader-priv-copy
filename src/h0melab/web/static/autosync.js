@@ -112,10 +112,13 @@
             ? `<span class="status-pill status-queued">${t("autosync.active", "Active")}</span>`
             : `<span class="status-pill status-cancelled">${t("autosync.paused", "Paused")}</span>`;
         const target = row.custom_path_name || t("index.default", "Default");
+        const subtitle = row.subtitle_language === "deu"
+          ? ` · ${esc(t("index.subtitles_german", "German subtitles"))}`
+          : "";
         return `<tr>
           <td><a href="${esc(row.series_url)}" target="_blank" rel="noopener noreferrer">${esc(row.title)}</a></td>
           <td>${esc(SITE_LABELS[row.site] || row.site)}</td>
-          <td>${esc(row.language)}<br><span class="hint">${esc(target)} · ${esc(row.provider)}</span></td>
+          <td>${esc(row.language)}<br><span class="hint">${esc(target)} · ${esc(row.provider)}${subtitle}</span></td>
           <td>${state}<br><span class="hint">${esc(formatTime(row.last_checked_at))}</span></td>
           <td>
             <button class="btn btn-ghost" data-toggle="${row.id}" data-enabled="${row.enabled ? "1" : "0"}">${row.enabled ? t("autosync.pause", "Pause") : t("autosync.resume", "Resume")}</button>

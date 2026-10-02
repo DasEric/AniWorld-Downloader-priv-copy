@@ -125,6 +125,7 @@ class SerienstreamEpisode:
         selected_path=None,
         selected_language=None,
         selected_provider=None,
+        selected_subtitle_language="none",
     ):
         if not self.__is_valid_serienstream_episode_url(url):
             raise ValueError(f"Invalid Serienstream episode URL: {url}")
@@ -140,15 +141,18 @@ class SerienstreamEpisode:
         self.__selected_path_param = selected_path
         self.__selected_language_param = selected_language
         self.__selected_provider_param = selected_provider
+        self.__selected_subtitle_language_param = selected_subtitle_language
 
         self.__provider_data = None
 
         self.__selected_path = None
         self.__selected_language = None
         self.__selected_provider = None
+        self.__selected_subtitle_language = None
 
         self.__redirect_url = None
         self.__provider_url = None
+        self.__media_asset = None
 
         # https://jellyfin.org/docs/general/server/media/shows/#organization
         self.__base_folder = None
@@ -274,6 +278,23 @@ class SerienstreamEpisode:
         self.__selected_provider = None
         self.__redirect_url = None
         self.__provider_url = None
+        self.__media_asset = None
+
+    @property
+    def selected_subtitle_language(self):
+        if self.__selected_subtitle_language is None:
+            from ..common.subtitles import normalize_subtitle_language
+
+            self.__selected_subtitle_language = normalize_subtitle_language(
+                self.__selected_subtitle_language_param
+            )
+        return self.__selected_subtitle_language
+
+    @selected_subtitle_language.setter
+    def selected_subtitle_language(self, value):
+        self.__selected_subtitle_language_param = value
+        self.__selected_subtitle_language = None
+        self.__media_asset = None
 
     @property
     def redirect_url(self):
@@ -331,16 +352,38 @@ class SerienstreamEpisode:
 
     @property
     def stream_url(self):
+        return self.media_asset.video_url
+
+    @property
+    def media_asset(self):
+        if self.__media_asset is not None:
+            return self.__media_asset
+
+        from ..common.subtitles import MediaAsset
+
+        media_key = f"get_media_asset_from_{self.selected_provider.lower()}"
+        direct_key = f"get_direct_link_from_{self.selected_provider.lower()}"
         try:
-            stream_url = provider_functions[
-                f"get_direct_link_from_{self.selected_provider.lower()}"
-            ](self.provider_url)
+            if media_key in provider_functions:
+                asset = provider_functions[media_key](self.provider_url)
+            else:
+                asset = MediaAsset(provider_functions[direct_key](self.provider_url), ())
         except KeyError:
             raise ValueError(
                 f"The provider '{self.selected_provider}' is not yet implemented."
             )
 
-        return stream_url
+        wanted = self.selected_subtitle_language
+        if wanted != "none" and asset.subtitle(wanted) is None:
+            raise ValueError(
+                f"Provider '{self.selected_provider}' has no German subtitles for this episode."
+            )
+        self.__media_asset = asset
+        return asset
+
+    def selected_subtitle_track(self):
+        wanted = self.selected_subtitle_language
+        return None if wanted == "none" else self.media_asset.subtitle(wanted)
 
     # TODO: add this into a common base class
     @property

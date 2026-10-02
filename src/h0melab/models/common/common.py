@@ -202,6 +202,7 @@ def check_downloaded(episode_path):
         "exists": False,
         "video_langs": set(),
         "audio_langs": set(),
+        "subtitle_langs": set(),
     }
 
     if not episode_path.exists():
@@ -222,6 +223,8 @@ def check_downloaded(episode_path):
             result["video_langs"].add(lang)
         elif s.get("codec_type") == "audio":
             result["audio_langs"].add(lang)
+        elif s.get("codec_type") == "subtitle":
+            result["subtitle_langs"].add(lang)
 
     return result
 
@@ -332,7 +335,7 @@ def _cleanup_episode_download(self):
 
 def _reset_provider_resolution_cache(self):
     for attr in list(vars(self)):
-        if attr.endswith(("__redirect_url", "__provider_url")):
+        if attr.endswith(("__redirect_url", "__provider_url", "__media_asset")):
             setattr(self, attr, None)
 
 
@@ -542,6 +545,7 @@ def _run_ffmpeg_with_progress(
     progress_start=0.0,
     progress_end=100.0,
     keep_progress=False,
+    before_output_args=None,
 ):
     """Run an ffmpeg node and stream its progress output cleanly.
 
@@ -570,6 +574,9 @@ def _run_ffmpeg_with_progress(
     stats_period = "10" if debug_mode else "1"
 
     args = ffmpeg.compile(node, overwrite_output=overwrite_output)
+    if before_output_args:
+        output_index = -2 if args and args[-1] == "-y" else -1
+        args[output_index:output_index] = [str(value) for value in before_output_args]
     if "-stats_period" not in args:
         args.insert(-1, "-stats_period")
         args.insert(-1, stats_period)
@@ -773,6 +780,106 @@ def movie_folder_enabled():
     return os.getenv("H0MELAB_MOVIE_FOLDER", "1") != "0"
 
 
+def _requested_subtitle_language(owner):
+    from .subtitles import normalize_subtitle_language
+
+    return normalize_subtitle_language(
+        getattr(owner, "selected_subtitle_language", "none")
+    )
+
+
+def _has_requested_subtitle(probe, wanted):
+    from .subtitles import normalize_subtitle_language
+
+    return wanted in {
+        normalize_subtitle_language(language)
+        for language in (probe.get("subtitle_langs") or set())
+    }
+
+
+def _embed_requested_subtitle(owner, episode_path, label="", progress_start=95.0):
+    """Atomically add the requested external soft subtitle to a finished file."""
+    wanted = _requested_subtitle_language(owner)
+    if wanted == "none":
+        return
+
+    probe = check_downloaded(episode_path)
+    if _has_requested_subtitle(probe, wanted):
+        return
+
+    track_getter = getattr(owner, "selected_subtitle_track", None)
+    track = track_getter() if callable(track_getter) else None
+    if track is None:
+        raise ValueError("Requested German subtitles are not available")
+
+    from .subtitles import download_subtitle
+
+    target_ext = episode_path.suffix.lower()
+    if target_ext not in (".mkv", ".mp4"):
+        raise ValueError(
+            f"Soft subtitles can only be remuxed into MKV or MP4, not {target_ext or 'this file'}"
+        )
+
+    subtitle_path = episode_path.with_name(
+        f"{episode_path.stem}.subtitle{track.suffix}"
+    )
+    output_path = episode_path.with_name(
+        f"{episode_path.stem}.subtitle-new{target_ext}"
+    )
+    try:
+        download_subtitle(track, subtitle_path)
+        existing_subtitles = 0
+        try:
+            existing_subtitles = sum(
+                1
+                for stream in ffmpeg.probe(str(episode_path)).get("streams", [])
+                if stream.get("codec_type") == "subtitle"
+            )
+        except ffmpeg.Error:
+            pass
+
+        codec = "mov_text" if target_ext == ".mp4" else "srt"
+        options = {
+            "c": "copy",
+            f"c:s:{existing_subtitles}": codec,
+            f"metadata:s:s:{existing_subtitles}": "language=deu",
+            f"disposition:s:{existing_subtitles}": "0",
+        }
+        metadata_args = [
+            f"-metadata:s:s:{existing_subtitles}",
+            "title=Deutsch",
+        ]
+        if target_ext == ".mp4":
+            metadata_args.extend(
+                [
+                    f"-metadata:s:s:{existing_subtitles}",
+                    "handler_name=Deutsch",
+                ]
+            )
+        # ffmpeg-python emits one -map per input when both input nodes are passed,
+        # preserving every stream in the existing file and adding the caption.
+        node = ffmpeg.output(
+            ffmpeg.input(str(episode_path)),
+            ffmpeg.input(str(subtitle_path)),
+            str(output_path),
+            **options,
+        )
+        _run_ffmpeg_with_progress(
+            node,
+            label=label,
+            progress_start=progress_start,
+            progress_end=100.0,
+            before_output_args=metadata_args,
+        )
+        verified = check_downloaded(output_path)
+        if not _has_requested_subtitle(verified, wanted):
+            raise RuntimeError("Remuxed file does not contain the requested subtitle track")
+        os.replace(output_path, episode_path)
+    finally:
+        subtitle_path.unlink(missing_ok=True)
+        output_path.unlink(missing_ok=True)
+
+
 def _finalize_episode(
     temp_path, episode_path, label="", owner=None, progress_start=0.0
 ):
@@ -787,6 +894,8 @@ def _finalize_episode(
     target_ext = episode_path.suffix.lower().lstrip(".")
 
     if target_ext == source_ext or target_ext not in ("mkv", "mp4"):
+        if owner is not None:
+            _embed_requested_subtitle(owner, temp_path, label)
         os.replace(temp_path, episode_path)
         if owner is not None:
             _finalize_resolution_naming(owner)
@@ -827,6 +936,8 @@ def _finalize_episode(
             progress_start=progress_start,
         )
 
+    if owner is not None:
+        _embed_requested_subtitle(owner, converted, label)
     os.replace(converted, episode_path)
     temp_path.unlink(missing_ok=True)
     if owner is not None:
@@ -1593,8 +1704,11 @@ def download(self):
 
                 has_video = bool(check["video_langs"])
                 has_audio = audio_code in check["audio_langs"]
+                requested_subtitle = _requested_subtitle_language(self)
+                has_subtitle = _has_requested_subtitle(check, requested_subtitle)
 
                 need_audio = not has_audio
+                need_subtitle = requested_subtitle != "none" and not has_subtitle
                 if not has_video:
                     need_video = True
                 elif not wants_clean_video:
@@ -1602,8 +1716,18 @@ def download(self):
                 else:
                     need_video = False
 
-                if not need_audio and not need_video:
+                if not need_audio and not need_video and not need_subtitle:
                     logger.debug(f"[SKIPPED] {self._file_name}")
+                    return
+
+                if not need_audio and not need_video and need_subtitle:
+                    logger.debug("[REMUXING] adding requested German subtitles")
+                    _embed_requested_subtitle(
+                        self,
+                        self._episode_path,
+                        _progress_file_name(self),
+                        progress_start=0.0,
+                    )
                     return
 
                 os.makedirs(self._folder_path, exist_ok=True)

@@ -2,6 +2,7 @@
 
 from flask import Response, current_app, jsonify, request
 
+from ...config import is_sto_host
 from ...logger import get_logger
 from .. import db, worker
 from ..media import mangafire_format
@@ -54,6 +55,18 @@ def start_download():
         return jsonify({"error": "English Sub downloads are disabled"}), 403
 
     provider = data.get("provider", "VOE")
+    subtitle_language = data.get("subtitle_language", "none")
+    if not isinstance(subtitle_language, str):
+        return jsonify({"error": "subtitle_language must be a string"}), 400
+    subtitle_language = subtitle_language.strip().lower() or "none"
+    if subtitle_language not in ("none", "deu"):
+        return jsonify({"error": "subtitle_language must be 'none' or 'deu'"}), 400
+    sample_url = episodes[0].get("url", "") if isinstance(episodes[0], dict) else episodes[0]
+    is_serienstream = is_sto_host(data.get("series_url", "")) or is_sto_host(
+        str(sample_url)
+    )
+    if subtitle_language != "none" and not is_serienstream:
+        return jsonify({"error": "Soft subtitles are currently supported only for SerienStream"}), 400
     if provider == "MangaFire":
         episodes = _tag_mangafire(episodes, data.get("mangafire_format"))
 
@@ -63,6 +76,7 @@ def start_download():
         episodes=episodes,
         language=language,
         provider=provider,
+        subtitle_language=subtitle_language,
         username=_current_username(),
         custom_path_id=data.get("custom_path_id"),
     )

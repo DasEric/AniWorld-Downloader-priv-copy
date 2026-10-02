@@ -148,6 +148,7 @@ _SCHEMA = (
         episodes TEXT NOT NULL,
         total_episodes INTEGER NOT NULL,
         language TEXT NOT NULL,
+        subtitle_language TEXT NOT NULL DEFAULT 'none',
         provider TEXT NOT NULL,
         active_provider TEXT,
         username TEXT,
@@ -184,6 +185,7 @@ _SCHEMA = (
         site TEXT NOT NULL CHECK(site IN ('aniworld','sto')),
         title TEXT NOT NULL,
         language TEXT NOT NULL,
+        subtitle_language TEXT NOT NULL DEFAULT 'none',
         provider TEXT NOT NULL,
         custom_path_id INTEGER,
         baseline_episodes TEXT NOT NULL DEFAULT '[]',
@@ -290,7 +292,9 @@ _MIGRATIONS = {
         "force_cancelled": "INTEGER NOT NULL DEFAULT 0",
         "started_at": "TEXT",
         "active_provider": "TEXT",
+        "subtitle_language": "TEXT NOT NULL DEFAULT 'none'",
     },
+    "autosync_series": {"subtitle_language": "TEXT NOT NULL DEFAULT 'none'"},
 }
 
 _initialized = False
@@ -521,6 +525,7 @@ def add_to_queue(
     episodes,
     language,
     provider,
+    subtitle_language="none",
     username=None,
     custom_path_id=None,
     source="manual",
@@ -529,15 +534,16 @@ def add_to_queue(
     with session() as conn:
         cur = conn.execute(
             "INSERT INTO download_queue "
-            "(title, series_url, episodes, total_episodes, language, provider, username, "
+            "(title, series_url, episodes, total_episodes, language, subtitle_language, provider, username, "
             " custom_path_id, source, discord_user_id) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 title,
                 series_url,
                 json.dumps(episodes),
                 len(episodes),
                 language,
+                subtitle_language,
                 provider,
                 username,
                 custom_path_id,
@@ -662,7 +668,7 @@ _STATUS_GROUPS = {
 # item. The list never shows it and it is by far the biggest column, so the page
 # asks for the row without it.
 _QUEUE_SLIM_COLUMNS = (
-    "id, title, series_url, total_episodes, language, provider, active_provider, "
+    "id, title, series_url, total_episodes, language, subtitle_language, provider, active_provider, "
     "username, status, "
     "position, current_episode, current_url, errors, custom_path_id, source, "
     "captcha_url, discord_user_id, cancel_requested, force_cancelled, "
@@ -1025,19 +1031,21 @@ def add_autosync_series(
     title,
     language,
     provider,
+    subtitle_language="none",
     custom_path_id=None,
     baseline_episodes=None,
 ):
     with session() as conn:
         cur = conn.execute(
             "INSERT INTO autosync_series "
-            "(series_url, site, title, language, provider, custom_path_id, "
-            " baseline_episodes) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            "(series_url, site, title, language, subtitle_language, provider, custom_path_id, "
+            " baseline_episodes) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 series_url,
                 site,
                 title,
                 language,
+                subtitle_language,
                 provider,
                 custom_path_id,
                 json.dumps(baseline_episodes or []),
@@ -1050,6 +1058,7 @@ def update_autosync_series(series_id, **values):
     allowed = {
         "language",
         "provider",
+        "subtitle_language",
         "custom_path_id",
         "baseline_episodes",
         "enabled",

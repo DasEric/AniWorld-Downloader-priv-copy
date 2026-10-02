@@ -98,6 +98,8 @@ def _build_episode(url, extra, item, selected_path):
         except Exception:
             series = None
         kwargs["format"] = extra["_format"]
+    if provider.name == "SerienStream":
+        kwargs["selected_subtitle_language"] = item.get("subtitle_language") or "none"
 
     # MegaKino episodes build their own series context internally
     if series is not None and provider.name != "MegaKino":

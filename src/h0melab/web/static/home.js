@@ -21,6 +21,8 @@
   const providerSelect = el("providerSelect");
   const languageProviderRow = el("languageProviderRow");
   const mangaFireRow = el("mangaFireRow");
+  const subtitleRow = el("subtitleRow");
+  const subtitleSelect = el("subtitleSelect");
   const customPathRow = el("customPathRow");
   const customPathSelect = el("customPathSelect");
   const autosyncRow = el("autosyncRow");
@@ -431,6 +433,7 @@
     episodeCache = {};
     episodeLoads = {};
     availableProviders = null;
+    if (subtitleSelect) subtitleSelect.value = "none";
     autosyncEntryId = null;
     autosyncStateToken += 1;
     if (autosyncToggle) {
@@ -513,6 +516,7 @@
     const manga = isMangaFire(url);
     languageProviderRow.hidden = hanime || manga;
     mangaFireRow.hidden = !manga;
+    if (subtitleRow) subtitleRow.hidden = currentSite !== "sto";
     if (!hanime && !manga) {
       rebuildLanguageOptions();
       fillProviderSelect(["megakino", "moflix"].includes(currentSite) ? [] : window.STATIC_PROVIDERS);
@@ -596,6 +600,9 @@
         );
         if (storedProvider) providerSelect.value = storedProvider.value;
       }
+      if (subtitleSelect && data.series && data.series.subtitle_language) {
+        subtitleSelect.value = data.series.subtitle_language;
+      }
     } catch (error) {
       if (requestToken !== autosyncStateToken) return;
       autosyncEntryId = null;
@@ -621,7 +628,8 @@
             series_url: seriesUrl,
             language: languageSelect.value,
             provider: providerSelect.value,
-            custom_path_id: customPathSelect.value ? Number(customPathSelect.value) : null
+            custom_path_id: customPathSelect.value ? Number(customPathSelect.value) : null,
+            subtitle_language: currentSite === "sto" && subtitleSelect ? subtitleSelect.value : "none"
           });
           showToast(t("autosync.added_series", "Series added to Auto-Sync"));
         } else if (entryId !== null) {
@@ -634,6 +642,21 @@
         await refreshAutosyncState();
         autosyncMutating = false;
         if (!autosyncRow.hidden) autosyncToggle.disabled = false;
+      }
+    });
+  }
+
+  if (subtitleSelect) {
+    subtitleSelect.addEventListener("change", async () => {
+      if (currentSite !== "sto" || autosyncEntryId === null || !autosyncToggle?.checked) return;
+      const selectedValue = subtitleSelect.value;
+      try {
+        await apiSend(`/api/autosync/series/${autosyncEntryId}`, "PATCH", {
+          subtitle_language: selectedValue
+        });
+      } catch (error) {
+        showToast(error.message);
+        await refreshAutosyncState();
       }
     });
   }
@@ -886,6 +909,9 @@
       language: hanime ? "Japanese" : manga ? "MangaFire" : languageSelect.value,
       provider: hanime ? "HanimeTV" : manga ? "MangaFire" : providerSelect.value
     };
+    if (currentSite === "sto" && subtitleSelect) {
+      body.subtitle_language = subtitleSelect.value;
+    }
     if (manga) body.mangafire_format = el("mangaFireFormat").value;
     if (customPathSelect.value) body.custom_path_id = Number(customPathSelect.value);
 

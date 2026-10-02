@@ -32,6 +32,7 @@ def add_row(
     path_id=None,
     baseline=None,
     enabled=True,
+    subtitle_language="none",
 ):
     row_id = db.add_autosync_series(
         series_url=url,
@@ -39,6 +40,7 @@ def add_row(
         title=title,
         language=language,
         provider="VOE",
+        subtitle_language=subtitle_language,
         custom_path_id=path_id,
         baseline_episodes=baseline or [],
     )
@@ -133,6 +135,22 @@ def test_add_supports_serienstream(monkeypatch):
     assert row["site"] == "sto"
 
 
+def test_add_serienstream_persists_german_soft_subtitles(monkeypatch):
+    monkeypatch.setattr(
+        autosync,
+        "_remote_inventory",
+        lambda url, language: (FakeSeries("Dark"), inventory(1, site="sto")),
+    )
+    monkeypatch.setattr(autosync, "_validated_provider", lambda name: "VOE")
+    row = autosync.add_subscription(
+        series_url=STO,
+        language="German Dub",
+        provider="VOE",
+        subtitle_language="deu",
+    )
+    assert row["subtitle_language"] == "deu"
+
+
 def test_aniworld_language_flags_are_read_per_episode():
     series = AniworldSeries(AW)
     season = AniworldSeason(f"{AW}/staffel-1", series=series)
@@ -214,6 +232,47 @@ def test_gap_mode_queues_every_missing_episode(monkeypatch, downloads):
     assert result["status"] == "queued"
     queued = json.loads(db.get_queue_item(result["queue_id"])["episodes"])
     assert queued == [episode(2), episode(3)]
+
+
+def test_serienstream_autosync_forwards_subtitles_to_queue(monkeypatch, downloads):
+    row = add_row(
+        url=STO,
+        site="sto",
+        title="Dark",
+        subtitle_language="deu",
+    )
+    monkeypatch.setattr(
+        autosync,
+        "_remote_inventory",
+        lambda url, language: (FakeSeries("Dark"), inventory(1, site="sto")),
+    )
+    monkeypatch.setattr(autosync, "_downloaded", lambda _subscription: set())
+
+    result = autosync._handle(row)
+
+    queued = db.get_queue_item(result["queue_id"])
+    assert queued["source"] == "autosync"
+    assert queued["subtitle_language"] == "deu"
+
+
+def test_autosync_existing_episode_requires_requested_subtitle(tmp_path, monkeypatch):
+    folder = tmp_path / "Dark" / "Season 01"
+    folder.mkdir(parents=True)
+    episode_file = folder / "Dark S01E001.mkv"
+    episode_file.write_bytes(b"video")
+    monkeypatch.setattr(
+        autosync, "languages_from_probe", lambda _path: {"German Dub"}
+    )
+    monkeypatch.setattr(autosync, "subtitle_languages_from_probe", lambda _path: set())
+
+    assert autosync.episodes_in_folder(folder.parent, "German Dub", "deu") == set()
+
+    monkeypatch.setattr(
+        autosync, "subtitle_languages_from_probe", lambda _path: {"deu"}
+    )
+    assert autosync.episodes_in_folder(folder.parent, "German Dub", "deu") == {
+        (1, 1)
+    }
 
 
 def test_new_only_ignores_baseline_but_queues_later_episodes(monkeypatch, downloads):
@@ -511,6 +570,16 @@ def test_series_api_rejects_a_non_string_provider_update(client, monkeypatch):
     assert response.status_code == 400
 
 
+def test_series_api_updates_serienstream_subtitle_setting(client, monkeypatch):
+    monkeypatch.setenv("H0MELAB_ENABLE_AUTOSYNC", "1")
+    row = add_row(url=STO, site="sto", title="Dark")
+    response = client.patch(
+        f"/api/autosync/series/{row['id']}", json={"subtitle_language": "deu"}
+    )
+    assert response.status_code == 200
+    assert response.get_json()["series"]["subtitle_language"] == "deu"
+
+
 def test_series_api_cannot_resume_a_conflicting_language(client, monkeypatch):
     monkeypatch.setenv("H0MELAB_ENABLE_AUTOSYNC", "1")
     german = add_row()
@@ -544,6 +613,7 @@ def test_series_modal_uses_an_autosync_checkbox(client, monkeypatch):
 def test_series_modal_hides_autosync_when_the_feature_is_disabled(client):
     body = client.get("/").get_data(as_text=True)
     assert 'id="autosyncToggle"' not in body
+    assert 'id="subtitleSelect"' in body
 
 
 def _ran(hours_ago):

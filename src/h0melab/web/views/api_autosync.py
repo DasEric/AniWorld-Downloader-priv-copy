@@ -111,6 +111,7 @@ def add_series():
             language=language.strip(),
             provider=data.get("provider"),
             custom_path_id=data.get("custom_path_id"),
+            subtitle_language=data.get("subtitle_language", "none"),
         )
     except (sqlite3.IntegrityError, autosync.DuplicateSubscription):
         return jsonify({"error": "This series copy is already in Auto-Sync."}), 409
@@ -145,6 +146,15 @@ def update_series(series_id):
             values["provider"] = autosync._validated_provider(data["provider"])
         except (TypeError, ValueError) as exc:
             return jsonify({"error": str(exc)}), 400
+    if "subtitle_language" in data:
+        value = data["subtitle_language"]
+        if not isinstance(value, str) or value.strip().lower() not in ("none", "deu"):
+            return jsonify({"error": "subtitle_language must be 'none' or 'deu'."}), 400
+        item = db.get_autosync_series_item(series_id)
+        value = value.strip().lower()
+        if value != "none" and item and item.get("site") != "sto":
+            return jsonify({"error": "Soft subtitles are currently supported only for SerienStream."}), 400
+        values["subtitle_language"] = value
     if not values:
         return jsonify({"error": "No supported changes supplied."}), 400
     if not db.update_autosync_series(series_id, **values):

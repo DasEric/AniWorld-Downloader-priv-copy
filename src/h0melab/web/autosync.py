@@ -100,6 +100,24 @@ def languages_from_probe(episode_path):
     return found
 
 
+def subtitle_languages_from_probe(episode_path):
+    """Canonical subtitle language codes present in one downloaded file."""
+    from ..models.common.common import check_downloaded
+    from ..models.common.subtitles import normalize_subtitle_language
+
+    try:
+        probe = check_downloaded(episode_path)
+    except Exception as exc:
+        logger.debug("AutoSync: subtitle probe failed for %s: %s", episode_path, exc)
+        return set()
+    if not probe.get("exists"):
+        return set()
+    return {
+        normalize_subtitle_language(language)
+        for language in (probe.get("subtitle_langs") or set())
+    }
+
+
 def canonical_series_url(url):
     """Validate a series URL and store it under one stable canonical host."""
     if not isinstance(url, str) or not url.strip():
@@ -151,13 +169,22 @@ def _validated_provider(name):
     return chosen
 
 
-def add_subscription(*, series_url, language, provider=None, custom_path_id=None):
+def add_subscription(
+    *, series_url, language, provider=None, custom_path_id=None, subtitle_language="none"
+):
     """Validate and add one tracked copy, recording its language-specific baseline."""
     canonical, site = canonical_series_url(series_url)
     if not isinstance(language, str):
         raise TypeError("language must be a string.")
     if language not in SITE_LANGUAGES[site]:
         raise ValueError(f"{language or 'The selected language'} is not supported here.")
+    if not isinstance(subtitle_language, str):
+        raise TypeError("subtitle_language must be a string.")
+    subtitle_language = subtitle_language.strip().lower() or "none"
+    if subtitle_language not in ("none", "deu"):
+        raise ValueError("subtitle_language must be 'none' or 'deu'.")
+    if site != "sto" and subtitle_language != "none":
+        raise ValueError("Soft subtitles are currently supported only for SerienStream.")
     if custom_path_id is not None:
         if isinstance(custom_path_id, bool) or not isinstance(custom_path_id, int):
             raise TypeError("custom_path_id must be an integer or null.")
@@ -176,6 +203,7 @@ def add_subscription(*, series_url, language, provider=None, custom_path_id=None
         title=title,
         language=language,
         provider=chosen_provider,
+        subtitle_language=subtitle_language,
         custom_path_id=custom_path_id,
         baseline_episodes=sorted(_episode_key(numbers) for numbers in inventory.values()),
     )
@@ -207,11 +235,13 @@ def _matching_folders(base, title):
         return []
 
 
-def episodes_in_folder(folder, language=None):
-    """Episode numbers in a title folder, rejecting only a known wrong language."""
+def episodes_in_folder(folder, language=None, subtitle_language="none"):
+    """Episode numbers whose audio/video and requested soft subtitles are present."""
+    from ..models.common.subtitles import normalize_subtitle_language
     from .library import VIDEO_EXTENSIONS
     from .media import EPISODE_RE
 
+    subtitle_language = normalize_subtitle_language(subtitle_language)
     found = set()
     try:
         files = folder.rglob("*")
@@ -233,6 +263,10 @@ def episodes_in_folder(folder, language=None):
             # when its metadata positively identifies a different language.
             if detected_languages and language not in detected_languages:
                 continue
+        if subtitle_language != "none":
+            detected_subtitles = subtitle_languages_from_probe(file)
+            if subtitle_language not in detected_subtitles:
+                continue
         found.add((int(match.group(1)), int(match.group(2))))
     return found
 
@@ -241,7 +275,11 @@ def _downloaded(subscription):
     separated = paths.lang_separation_enabled()
     have = set()
     for folder in _matching_folders(_subscription_base(subscription), subscription["title"]):
-        have |= episodes_in_folder(folder, None if separated else subscription["language"])
+        have |= episodes_in_folder(
+            folder,
+            None if separated else subscription["language"],
+            subscription.get("subtitle_language") or "none",
+        )
     return have
 
 
@@ -303,6 +341,7 @@ def _handle(subscription):
         "series_url": series_url,
         "site": subscription["site"],
         "language": language,
+        "subtitle_language": subscription.get("subtitle_language") or "none",
         "where": _where(subscription),
     }
 
@@ -353,6 +392,7 @@ def _handle(subscription):
         episodes=missing,
         language=language,
         provider=subscription["provider"],
+        subtitle_language=subscription.get("subtitle_language") or "none",
         custom_path_id=subscription.get("custom_path_id"),
         source="autosync",
     )
